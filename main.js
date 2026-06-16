@@ -39,17 +39,26 @@ const world = Globe()(document.getElementById('globeViz'))
     
     // Wave Image (HTML DOM Elements - 100% crash proof from WebGL conflicts)
     .htmlElementsData([])
+    .htmlLat('lat')
+    .htmlLng('lng')
+    .htmlAltitude(0)
     .htmlElement(d => {
         const el = document.createElement('div');
         const size = 16 + (d.wave_height * 6); // Pixel size of the wave image
         const color = spriteColorInterpolator(d.weight);
         
+        // Explicitly size the container so Globe.gl knows how to project it
+        el.style.width = `${size}px`;
+        el.style.height = `${size}px`;
+        el.style.pointerEvents = 'none'; // Let the invisible point below handle hover
+        
         // Fluid Animated SVG - Dynamic Color, Perfect Transparency, Liquid Animation
         const duration = 1.0 + ((1.0 - d.weight) * 2.0); // Dangerous = 1s fast ripple. Calm = 3s slow swell.
         const heaveSpeed = 1.5 + Math.abs((d.lng % 2)); // Dynamic CSS heave speed
         
+        // Note the transform: translate(-50%, -50%) to perfectly center the wave over the coordinate
         el.innerHTML = `
-            <svg width="${size}" height="${size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="animation: heave ${heaveSpeed}s infinite alternate ease-in-out; filter: drop-shadow(0 0 12px ${color}); opacity: 0.9;">
+            <svg width="${size}" height="${size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="animation: heave ${heaveSpeed}s infinite alternate ease-in-out; filter: drop-shadow(0 0 12px ${color}); opacity: 0.9; transform: translate(-50%, -50%);">
               <path fill="${color}" d="M0 60 Q 25 40, 50 60 T 100 60 L 100 100 L 0 100 Z">
                 <animate attributeName="d" 
                   values="
@@ -62,7 +71,6 @@ const world = Globe()(document.getElementById('globeViz'))
             </svg>
         `;
         
-        el.style.pointerEvents = 'none'; // Let the invisible point below handle hover
         return el;
     })
     
@@ -159,17 +167,13 @@ function generateServerlessData() {
     return { points, arcs };
 }
 
-// Fetch Live Sea Data (Now 100% Serverless!)
-function fetchLiveHeatmap() {
+// Initialize the Globe exactly ONCE to prevent 350 DOM elements from continuously crashing and respawning
+setTimeout(() => {
     const data = generateServerlessData();
     world.htmlElementsData(data.points);
     world.pointsData(data.points);
     world.arcsData(data.arcs);
-}
-
-// Initial fetch and set polling every 4 seconds
-fetchLiveHeatmap();
-setInterval(fetchLiveHeatmap, 4000);
+}, 500); // 500ms delay ensures the Globe.gl WebGL camera is fully locked and mounted before projection math runs!
 
 // Auto-rotate majestically (Very slow speed requested by user)
 world.controls().autoRotate = true;
