@@ -31,6 +31,12 @@
             background: transparent !important;
             border: none !important;
         }
+        
+        /* Smooth, non-laggy vertical bobbing animation */
+        @keyframes heave {
+            0% { transform: translateY(-3px) scale(0.95); }
+            100% { transform: translateY(3px) scale(1.05); }
+        }
     </style>
 </head>
 <body>
@@ -43,12 +49,12 @@
         <p>Live CWA Coastal Gateway</p>
         
         <div class="legend">
-            <div class="legend-item"><div class="color-box safe"></div> Calm Waters (Low Risk)</div>
-            <div class="legend-item"><div class="color-box warning"></div> Heavy Weather (Caution)</div>
-            <div class="legend-item"><div class="color-box danger"></div> Storm/Rogue Waves (Danger)</div>
+            <div class="legend-item"><div class="color-box safe" style="background: rgb(20, 100, 255);"></div> Calm Waters (Low Risk)</div>
+            <div class="legend-item"><div class="color-box warning" style="background: rgb(255, 140, 0);"></div> Heavy Weather (Caution)</div>
+            <div class="legend-item"><div class="color-box danger" style="background: rgb(255, 30, 30);"></div> Storm/Rogue Waves (Danger)</div>
         </div>
     </div>
 
-    <script src="main.js?v=10"></script>
+    <script src="main.js?v=11"></script>
 </body>
 </html>
