@@ -60,19 +60,42 @@ baseEpicenters.forEach(ep => {
     ep.danger_score = ep.weight * 10.0;
 });
 
-// Nearest Neighbor AI Mapper
-function getNearestStationData(lat, lng) {
-    let closest = null;
-    let minDist = Infinity;
-    baseEpicenters.forEach(ep => {
-        // Euclidean distance mapping
-        const dist = Math.pow(ep.lat - lat, 2) + Math.pow(ep.lng - lng, 2);
-        if (dist < minDist) {
-            minDist = dist;
-            closest = ep;
-        }
-    });
-    return closest;
+// Inverse Distance Weighting (IDW) Spatial Simulation AI
+// Continuously blends marine conditions across all 17 stations for a perfectly smooth geographic gradient
+function simulateMarineConditionsIDW(lat, lng) {
+    let sumWeight = 0;
+    let sumWaveHeight = 0;
+    let sumWindSpeed = 0;
+    let sumDanger = 0;
+    
+    // We use a power parameter of 2 for standard spatial interpolation
+    const p = 2;
+    
+    for (let i = 0; i < baseEpicenters.length; i++) {
+        const ep = baseEpicenters[i];
+        const distSq = Math.pow(ep.lat - lat, 2) + Math.pow(ep.lng - lng, 2);
+        
+        // Exact geographic match
+        if (distSq < 0.0000001) return {
+            wave_height: ep.wave_height,
+            wind_speed: ep.wind_speed,
+            danger_score: ep.danger_score
+        };
+        
+        const dist = Math.sqrt(distSq);
+        const w = 1.0 / Math.pow(dist, p);
+        
+        sumWeight += w;
+        sumWaveHeight += ep.wave_height * w;
+        sumWindSpeed += ep.wind_speed * w;
+        sumDanger += ep.danger_score * w;
+    }
+    
+    return {
+        wave_height: sumWaveHeight / sumWeight,
+        wind_speed: sumWindSpeed / sumWeight,
+        danger_score: sumDanger / sumWeight
+    };
 }
 
 const markers = [];
@@ -135,23 +158,24 @@ async function renderTrueCoastline() {
                 normalRad -= Math.PI;
             }
             
-            // Push gently offshore so waves sit physically on the water right off the beach
-            const offshoreOffset = 0.02; // ~2km
+            // TIGHT BORDER ANALYSIS
+            // Push gently offshore so waves sit tightly on the exact physical border without clipping bays
+            const offshoreOffset = 0.005; // Tight fit
             const finalLat = lat - (Math.sin(normalRad) * offshoreOffset);
             const finalLng = lng - (Math.cos(normalRad) * offshoreOffset);
             
             // Rotate the SVG native Y-axis (crashing wave flow) to align exactly with the inland normal vector
             const rotation = -(normalRad * 180 / Math.PI) - 90;
             
-            // Map the nearest physical CWA station to this tiny stretch of beach
-            const station = getNearestStationData(finalLat, finalLng);
+            // Simulate the continuous marine condition at this exact border coordinate using IDW!
+            const sim = simulateMarineConditionsIDW(finalLat, finalLng);
             
-            // MICRO-SIZING: Extremely small, highly detailed delicate foam arcs
-            const baseWidth = 6 + (station.wave_height * 0.3);
-            const baseHeight = 6 + (station.wave_height * 0.3);
+            // MICRO-SIZING: Extremely small, highly detailed delicate foam arcs perfectly tracing the border
+            const baseWidth = 5 + (sim.wave_height * 0.2);
+            const baseHeight = 5 + (sim.wave_height * 0.2);
             
-            const color = getDangerColor(station.danger_score, 0.95);
-            const flowSpeed = Math.max(0.6, 2.5 - (station.wind_speed * 0.05));
+            const color = getDangerColor(sim.danger_score, 0.95);
+            const flowSpeed = Math.max(0.6, 2.5 - (sim.wind_speed * 0.05));
             
             const currentScale = Math.pow(2, map.getZoom() - 7);
             const w = baseWidth * currentScale;
@@ -184,12 +208,12 @@ async function renderTrueCoastline() {
 
             const popupHtml = `
                 <div style="font-size: 13px;">
-                    <b style="color: #0ff;">True Coastline Sector Analysis</b><br/>
-                    Mapped Node: <b>${station.name}</b><br/>
-                    Danger Score: <span style="color:${color}; font-weight: bold; font-size: 16px;">${station.danger_score.toFixed(1)} / 10</span><br/><br/>
+                    <b style="color: #0ff;">Simulated Border Analysis</b><br/>
+                    Status: <b style="color: #0ff;">IDW Live Tracking</b><br/>
+                    Danger Score: <span style="color:${color}; font-weight: bold; font-size: 16px;">${sim.danger_score.toFixed(1)} / 10</span><br/><br/>
                     📍 Sector Coord: <b>Lat ${finalLat.toFixed(4)}, Lng ${finalLng.toFixed(4)}</b><br/>
-                    🌊 Wave Height: <b>${station.wave_height.toFixed(1)} m</b><br/>
-                    💨 Wind Speed: <b>${station.wind_speed.toFixed(1)} m/s</b>
+                    🌊 Predicted Wave: <b>${sim.wave_height.toFixed(1)} m</b><br/>
+                    💨 Predicted Wind: <b>${sim.wind_speed.toFixed(1)} m/s</b>
                 </div>
             `;
 
