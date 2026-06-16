@@ -125,16 +125,17 @@ function generateServerlessData() {
     const points = [];
     const arcs = [];
     
-    // Epicenters strictly in deep ocean
+    // Epicenters strictly in deep ocean (Tightened to avoid any land clipping)
     const epicenters = [
-        [45.0, -30.0, 15.0],    // North Atlantic
-        [0.0, -30.0, 20.0],     // Central Atlantic
-        [-40.0, 0.0, 25.0],     // South Atlantic / Southern Ocean
-        [-20.0, 75.0, 20.0],    // Indian Ocean
-        [40.0, 160.0, 25.0],    // North Pacific
-        [0.0, -150.0, 30.0],    // Central Pacific
-        [-40.0, -120.0, 25.0],  // South Pacific
-        [-10.0, -110.0, 20.0],  // East Pacific
+        [40.0, -40.0, 10.0],    // North Atlantic
+        [0.0, -30.0, 15.0],     // Central Atlantic
+        [-45.0, 0.0, 15.0],     // South Atlantic / Southern Ocean
+        [-25.0, 80.0, 15.0],    // Indian Ocean
+        [40.0, 175.0, 15.0],    // North Pacific (Moved East to avoid Russia/Japan)
+        [0.0, -150.0, 25.0],    // Central Pacific
+        [-40.0, -130.0, 20.0],  // South Pacific
+        [-10.0, -100.0, 15.0],  // East Pacific
+        [-55.0, 120.0, 10.0],   // Southern Ocean
     ];
 
     for (let i = 0; i < 350; i++) {
