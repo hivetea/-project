@@ -103,7 +103,8 @@ data.points.forEach(d => {
     const rotation = d.angle - 90;
     
     // Calculate initial scale size based on starting zoom (7)
-    const currentScale = Math.pow(1.5, map.getZoom() - 7);
+    // Leaflet scales exactly by a factor of 2.0 per zoom level
+    const currentScale = Math.pow(2, map.getZoom() - 7);
     const size = baseSize * currentScale;
     
     // Using 100% reliable <animateTransform> for SVG flow animation
@@ -147,9 +148,9 @@ data.points.forEach(d => {
 
 // STRCIT SCALING ENGINE:
 // Recalculates pixel width/height when zooming so waves shrink dynamically!
+// Leaflet scales by exactly 2x per zoom level, so this perfectly locks the wave size geographically.
 map.on('zoom', () => {
-    // 1.5 multiplier per zoom level (zooming out shrinks icon size geographically)
-    const scale = Math.pow(1.5, map.getZoom() - 7);
+    const scale = Math.pow(2, map.getZoom() - 7);
     markers.forEach(m => {
         const icon = m.layer._icon;
         if (icon) {
