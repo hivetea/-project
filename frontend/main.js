@@ -248,8 +248,10 @@ function drawUnifiedCoastline() {
         // ------------------------------------
         
         const rotation = -(normalRad * 180 / Math.PI) - 90;
-        const baseWidth = 5 + (finalWaveHeight * 0.2);
-        const baseHeight = 5 + (finalWaveHeight * 0.2);
+        
+        // Reasonable physical size (20px to 40px)
+        const baseWidth = 20 + (finalWaveHeight * 4.0);
+        const baseHeight = 20 + (finalWaveHeight * 4.0);
         
         const color = getDangerColor(finalDangerScore, 0.95);
         const flowSpeed = Math.max(0.6, 2.5 - (sim.wind_speed * 0.05));
@@ -343,12 +345,13 @@ function drawDeepOceanGrid() {
             }
         }
         
-        const baseWidth = 5 + (node.wh * 1.5);
-        const baseHeight = 5 + (node.wh * 1.5);
+        // REASONABLE VISIBLE SIZING (approx 15-25px instead of 5px)
+        const baseWidth = 15 + (node.wh * 3.0);
+        const baseHeight = 15 + (node.wh * 3.0);
         
-        let color = getDangerColor(Math.min(10, node.wh * 3.0), 0.65); 
+        let color = getDangerColor(Math.min(10, node.wh * 3.0), 0.7); 
         if (physicsStatus === "Deflected by Coastline") {
-            color = getDangerColor(Math.min(10, node.wh * 3.0 + 2.0), 0.85);
+            color = getDangerColor(Math.min(10, node.wh * 3.0 + 2.0), 0.9);
         }
 
         const flowSpeed = Math.max(0.6, 5.0 - (node.cv * 2));
@@ -356,10 +359,13 @@ function drawDeepOceanGrid() {
         const w = baseWidth * currentScale;
         const h = baseHeight * currentScale;
         
+        // Ensure stroke is visible. A width of 15px with stroke-width 8 = ~1.2px on screen
+        const strokeVis = 8;
+        
         const svgHtml = `
             <div style="width: 100%; height: 100%; transform: rotate(${rotation}deg); display: flex; align-items: center; justify-content: center;">
                 <svg width="100%" height="100%" viewBox="-50 -50 100 100">
-                    <g stroke="${color}" stroke-width="2" stroke-linecap="round" fill="none">
+                    <g stroke="${color}" stroke-width="${strokeVis}" stroke-linecap="round" fill="none">
                         <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
                             <animateTransform attributeName="transform" type="translate" from="0, -30" to="0, 30" dur="${flowSpeed}s" repeatCount="indefinite" />
                             <animate attributeName="opacity" values="0; 1; 1; 0" keyTimes="0; 0.2; 0.8; 1" dur="${flowSpeed}s" repeatCount="indefinite" />
