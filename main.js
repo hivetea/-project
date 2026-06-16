@@ -1,34 +1,14 @@
-// Maps a danger weight (0.0 to 1.0) to a gradient: White -> Orange -> Dark Red
+// Maps a danger weight (0.0 to 1.0) to a gradient optimized for Light Maps: Deep Blue -> Orange -> Red
 const colorInterpolator = t => {
-    if (t < 0.5) {
-        const ratio = t * 2.0;
-        const r = 255;
-        const g = Math.round(255 - (90 * ratio));
-        const b = Math.round(255 - (255 * ratio));
-        return `rgba(${r}, ${g}, ${b}, ${0.8})`; 
-    } else {
-        const ratio = (t - 0.5) * 2.0;
-        const r = Math.round(255 - (75 * ratio));
-        const g = Math.round(165 - (165 * ratio));
-        const b = 0;
-        return `rgba(${r}, ${g}, ${b}, ${0.9})`;
-    }
+    if (t < 0.5) return `rgba(20, 100, 255, 0.9)`;  // Safe: Blue
+    else if (t < 0.8) return `rgba(255, 140, 0, 0.9)`; // Caution: Orange
+    else return `rgba(255, 30, 30, 0.9)`;           // Danger: Red
 };
 
 const spriteColorInterpolator = t => {
-    if (t < 0.5) {
-        const ratio = t * 2.0;
-        const r = 255;
-        const g = Math.round(255 - (90 * ratio));
-        const b = Math.round(255 - (255 * ratio));
-        return `rgb(${r}, ${g}, ${b})`; 
-    } else {
-        const ratio = (t - 0.5) * 2.0;
-        const r = Math.round(255 - (75 * ratio));
-        const g = Math.round(165 - (165 * ratio));
-        const b = 0;
-        return `rgb(${r}, ${g}, ${b})`;
-    }
+    if (t < 0.5) return `rgb(20, 100, 255)`;
+    else if (t < 0.8) return `rgb(255, 140, 0)`;
+    else return `rgb(255, 30, 30)`;
 };
 
 // Initialize Leaflet Map (Centered on Taiwan)
@@ -38,14 +18,14 @@ const map = L.map('globeViz', {
     zoomControl: false // Cleaner UI
 });
 
-// Add Dark Mode Base Map (CartoDB Dark Matter)
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+// Add Light Mode Base Map (CartoDB Light All) - Much brighter and cleaner
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
     subdomains: 'abcd',
     maxZoom: 20
 }).addTo(map);
 
-// Serverless Data Engine (Focused on Taiwan Coast)
+// Serverless Data Engine (Balanced: Exactly 1 Wave per Station)
 function generateServerlessData() {
     const points = [];
     const arcs = [];
@@ -71,39 +51,29 @@ function generateServerlessData() {
         [24.75, 121.85]  // Yilan
     ];
 
-    // 0.18 mathematical degrees is roughly 20km!
-    const radius = 0.18;
-
-    for (let i = 0; i < 350; i++) {
-        const center = coastalEpicenters[Math.floor(Math.random() * coastalEpicenters.length)];
+    coastalEpicenters.forEach(center => {
+        // Place exactly one wave per station to perfectly balance the map and instantly eliminate DOM lag
+        const lat = center[0];
+        const lng = center[1];
         
-        // Random polar coordinates within the 20km radius
-        const r = Math.random() * radius;
-        const theta = Math.random() * Math.PI * 2;
-        
-        const lat_offset = r * Math.sin(theta);
-        const lng_offset = r * Math.cos(theta);
-        
-        const lat = center[0] + lat_offset;
-        const lng = center[1] + lng_offset;
-        
-        const intensity = 1.0 - (r / radius); // Stronger near the coast
+        // Slightly random intensity for realism
+        const intensity = 0.5 + Math.random() * 0.5;
         
         const wave_height = 0.5 + (Math.random() * 4.0 * intensity) + (intensity * 6.0);
         const wind_speed = 5.0 + (Math.random() * 15.0 * intensity) + (intensity * 20.0);
         const weight = Math.min(wave_height / 12.0, 1.0);
         
         // Arc distance scaled for local 2D view
-        const arc_dist = 0.05 + (wind_speed * 0.005);
+        const arc_dist = 0.2 + (wind_speed * 0.01);
         const angle = Math.random() * Math.PI * 2;
         const end_lat = lat + (Math.sin(angle) * arc_dist);
         const end_lng = lng + (Math.cos(angle) * arc_dist);
         
-        const color = `rgba(255, 255, 255, ${Math.min(weight, 0.8)})`;
+        const color = colorInterpolator(weight); // Use alpha version for arcs
         
         points.push({ lat, lng, wave_height, wind_speed, weight, direction: "N" });
         arcs.push({ start_lat: lat, start_lng: lng, end_lat, end_lng, color });
-    }
+    });
     
     return { points, arcs };
 }
@@ -112,28 +82,21 @@ function generateServerlessData() {
 const data = generateServerlessData();
 
 data.points.forEach(d => {
-    const size = 16 + (d.wave_height * 6); // Pixel size of the wave image
+    const size = 20 + (d.wave_height * 4); // Pixel size of the wave image
     const color = spriteColorInterpolator(d.weight);
     
-    // Fluid Animated SVG - Dynamic Color, Perfect Transparency, Liquid Animation
-    const duration = 1.0 + ((1.0 - d.weight) * 2.0); // Dangerous = 1s fast ripple. Calm = 3s slow swell.
-    const heaveSpeed = 1.5 + Math.abs((d.lng % 2)); // Dynamic CSS heave speed
+    // Fluid Animated SVG - Genuine Wave Shape with smooth bobbing
+    const heaveSpeed = 1.0 + Math.abs((d.lng % 2)); // Dynamic CSS heave speed
     
     const svgHtml = `
-        <svg width="${size}" height="${size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="animation: heave ${heaveSpeed}s infinite alternate ease-in-out; filter: drop-shadow(0 0 12px ${color}); opacity: 0.9;">
-          <path fill="${color}" d="M0 60 Q 25 40, 50 60 T 100 60 L 100 100 L 0 100 Z">
-            <animate attributeName="d" 
-              values="
-                M0 60 Q 25 40, 50 60 T 100 60 L 100 100 L 0 100 Z;
-                M0 60 Q 25 80, 50 60 T 100 60 L 100 100 L 0 100 Z;
-                M0 60 Q 25 40, 50 60 T 100 60 L 100 100 L 0 100 Z" 
-              dur="${duration}s" 
-              repeatCount="indefinite" />
-          </path>
+        <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation: heave ${heaveSpeed}s infinite alternate ease-in-out; filter: drop-shadow(0 0 4px ${color}); opacity: 0.95;">
+            <path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"></path>
+            <path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"></path>
+            <path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"></path>
         </svg>
     `;
 
-    // Create a Custom Leaflet Icon using our SVG
+    // Create a Custom Leaflet Icon using our exact SVG
     const waveIcon = L.divIcon({
         html: svgHtml,
         className: 'custom-wave-icon',
@@ -170,8 +133,8 @@ data.arcs.forEach(arc => {
         [arc.end_lat, arc.end_lng]
     ], {
         color: arc.color,
-        weight: 1.5,
-        opacity: 0.6,
+        weight: 2,
+        opacity: 0.8,
         dashArray: '4, 6', // Simulated dashed wind lines
         lineCap: 'round'
     }).addTo(map);
