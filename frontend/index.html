@@ -23,6 +23,24 @@
             font-family: 'Inter', sans-serif;
         }
         .leaflet-popup-tip {
+            background: rgba(10, 15, 25, 0.95);
+        }
+
+        .overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            color: #222;
+            z-index: 9999;
+            pointer-events: auto;
+            width: 280px;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+
         /* Reset Leaflet marker default styles for custom SVGs */
         .leaflet-div-icon {
             background: transparent !important;
@@ -54,6 +72,6 @@
         </div>
     </div>
 
-    <script src="main.js?v=17"></script>
+    <script src="main.js?v=18"></script>
 </body>
 </html>
