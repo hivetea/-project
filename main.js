@@ -46,8 +46,10 @@ const world = Globe()(document.getElementById('globeViz'))
         
         // Fluid Animated SVG - Dynamic Color, Perfect Transparency, Liquid Animation
         const duration = 1.0 + ((1.0 - d.weight) * 2.0); // Dangerous = 1s fast ripple. Calm = 3s slow swell.
+        const heaveSpeed = 1.5 + Math.abs((d.lng % 2)); // Dynamic CSS heave speed
+        
         el.innerHTML = `
-            <svg width="${size}" height="${size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 0 12px ${color}); opacity: 0.9;">
+            <svg width="${size}" height="${size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="animation: heave ${heaveSpeed}s infinite alternate ease-in-out; filter: drop-shadow(0 0 12px ${color}); opacity: 0.9;">
               <path fill="${color}" d="M0 60 Q 25 40, 50 60 T 100 60 L 100 100 L 0 100 Z">
                 <animate attributeName="d" 
                   values="
@@ -60,8 +62,6 @@ const world = Globe()(document.getElementById('globeViz'))
             </svg>
         `;
         
-        // CSS animation for heaving wave
-        el.style.animation = `heave ${1.5 + Math.abs((d.lng % 2))}s infinite alternate ease-in-out`;
         el.style.pointerEvents = 'none'; // Let the invisible point below handle hover
         return el;
     })
