@@ -23,19 +23,16 @@
             font-family: 'Inter', sans-serif;
         }
         .leaflet-popup-tip {
-            background: rgba(10, 15, 25, 0.95);
-        }
-        
         /* Reset Leaflet marker default styles for custom SVGs */
         .leaflet-div-icon {
             background: transparent !important;
             border: none !important;
         }
-        
-        /* Smooth, non-laggy vertical bobbing animation */
-        @keyframes heave {
-            0% { transform: translateY(-3px) scale(0.95); }
-            100% { transform: translateY(3px) scale(1.05); }
+
+        /* Seamless horizontal flowing animation for sine waves */
+        @keyframes flow {
+            0% { transform: translateX(0px); }
+            100% { transform: translateX(100px); }
         }
     </style>
 </head>
@@ -55,6 +52,6 @@
         </div>
     </div>
 
-    <script src="main.js?v=11"></script>
+    <script src="main.js?v=12"></script>
 </body>
 </html>
