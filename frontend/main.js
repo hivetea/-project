@@ -211,9 +211,9 @@ async function renderDeepOceanGrid() {
     const lats = [];
     const lngs = [];
     
-    // Spawn dense hex grid over deep ocean (0.3 step = ~33km)
-    for (let lat = 21.0; lat <= 26.0; lat += 0.3) {
-        for (let lng = 119.0; lng <= 123.0; lng += 0.3) {
+    // Spawn ULTRA dense hex grid over deep ocean (0.15 step = ~16km)
+    for (let lat = 21.0; lat <= 26.0; lat += 0.15) {
+        for (let lng = 119.0; lng <= 123.0; lng += 0.15) {
             
             // Check true distance to land using the geojson polygon
             let minDistSq = Infinity;
@@ -227,15 +227,15 @@ async function renderDeepOceanGrid() {
             }
 
             // Hex staggered offset to create interlocking honeycomb grid
-            const hexOffset = (Math.round(lat / 0.3) % 2 === 0) ? 0 : 0.15;
+            const hexOffset = (Math.round(lat / 0.15) % 2 === 0) ? 0 : 0.075;
             const finalLng = lng + hexOffset;
 
             const insideLand = trueCoastlineRing.length > 0 && isPointInPolygon([finalLng, lat], trueCoastlineRing);
 
-            // Exclude nodes that are physically inside land or too close to the beach (~15km)
-            if (!insideLand && minDistSq > 0.02) {
-                lats.push(lat.toFixed(2));
-                lngs.push(finalLng.toFixed(2));
+            // Exclude nodes that are physically inside land or too close to the beach (~8km)
+            if (!insideLand && minDistSq > 0.005) {
+                lats.push(lat.toFixed(3));
+                lngs.push(finalLng.toFixed(3));
             }
         }
     }
@@ -332,17 +332,17 @@ async function renderDeepOceanGrid() {
                     }
                 }
                 
-                // Smaller, more reasonable dense sizing
-                const baseWidth = 15 + (wh * 5);
-                const baseHeight = 15 + (wh * 5);
+                // EXTREMELY small sizes as requested
+                const baseWidth = 5 + (wh * 1.5);
+                const baseHeight = 5 + (wh * 1.5);
                 
-                // 65% opacity, reasonable colors
+                // 65% opacity
                 let color = getDangerColor(Math.min(10, wh * 3.0), 0.65); 
                 if (physicsStatus === "Deflected by Coastline") {
-                    color = getDangerColor(Math.min(10, wh * 3.0 + 2.0), 0.85); // Slightly brighter
+                    color = getDangerColor(Math.min(10, wh * 3.0 + 2.0), 0.85);
                 }
 
-                // Thinner stroke for dense grid
+                // Ultra-thin stroke for high density
                 const flowSpeed = Math.max(0.6, 5.0 - (cv * 2));
                 
                 const currentScale = Math.pow(2, map.getZoom() - 7);
@@ -352,7 +352,7 @@ async function renderDeepOceanGrid() {
                 const svgHtml = `
                     <div style="width: 100%; height: 100%; transform: rotate(${rotation}deg); display: flex; align-items: center; justify-content: center;">
                         <svg width="100%" height="100%" viewBox="-50 -50 100 100">
-                            <g stroke="${color}" stroke-width="4" stroke-linecap="round" fill="none">
+                            <g stroke="${color}" stroke-width="2" stroke-linecap="round" fill="none">
                                 <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
                                     <animateTransform attributeName="transform" type="translate" from="0, -30" to="0, 30" dur="${flowSpeed}s" repeatCount="indefinite" />
                                     <animate attributeName="opacity" values="0; 1; 1; 0" keyTimes="0; 0.2; 0.8; 1" dur="${flowSpeed}s" repeatCount="indefinite" />
