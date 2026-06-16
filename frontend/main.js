@@ -53,7 +53,7 @@ function generateServerlessData() {
     const closedEpicenters = [...baseEpicenters, baseEpicenters[0]];
     const coastalEpicenters = [];
     
-    const NUM_INTERPOLATIONS = 5; // Predict and fill 5 intermediate points between every station!
+    const NUM_INTERPOLATIONS = 20; // Predict and fill 20 intermediate points between every station for ultra-high detail!
 
     for (let i = 0; i < closedEpicenters.length - 1; i++) {
         const p1 = closedEpicenters[i];
@@ -79,9 +79,9 @@ function generateServerlessData() {
         const dx = 121.0 - lng;
         const angleToCenterRad = Math.atan2(dy, dx);
         
-        // DEEP OFFSHORE PUSH (35km)
-        // This guarantees the wave never visually overlaps the landmass, even in concave bays
-        const offshoreOffset = 0.35; 
+        // BRING CLOSER TO THE BEACH (8km offshore)
+        // This makes it closely hug the actual coastline without touching it
+        const offshoreOffset = 0.08; 
         lat = lat - (Math.sin(angleToCenterRad) * offshoreOffset);
         lng = lng - (Math.cos(angleToCenterRad) * offshoreOffset);
 
@@ -106,8 +106,8 @@ const markers = [];
 
 data.points.forEach(d => {
     // Micro-sizing: Waves are extremely tiny and sleek now
-    const baseWidth = 20 + (d.wave_height * 0.5); 
-    const baseHeight = 20 + (d.wave_height * 0.5);
+    const baseWidth = 12 + (d.wave_height * 0.2); 
+    const baseHeight = 12 + (d.wave_height * 0.2);
     
     const color = getDangerColor(d.danger_score, 0.95);
     const flowSpeed = Math.max(0.6, 2.5 - (d.wind_speed * 0.05));
@@ -119,11 +119,11 @@ data.points.forEach(d => {
     const h = baseHeight * currentScale;
     
     // CRASHING GIF ANIMATION:
-    // Instead of moving sideways, the waves move forwards along the Y axis, fading out as they crash!
+    // Drop shadow removed to guarantee 60fps with 350+ points
     const svgHtml = `
-        <div style="width: 100%; height: 100%; transform: rotate(${rotation}deg); display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 0 2px ${color});">
+        <div style="width: 100%; height: 100%; transform: rotate(${rotation}deg); display: flex; align-items: center; justify-content: center;">
             <svg width="100%" height="100%" viewBox="-50 -50 100 100">
-                <g stroke="${color}" stroke-width="8" stroke-linecap="round" fill="none">
+                <g stroke="${color}" stroke-width="12" stroke-linecap="round" fill="none">
                     <!-- Crashing Wave 1 -->
                     <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
                         <animateTransform attributeName="transform" type="translate" from="0, -30" to="0, 30" dur="${flowSpeed}s" repeatCount="indefinite" />
