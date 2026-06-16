@@ -50,8 +50,22 @@ function generateServerlessData() {
     ];
 
     coastalEpicenters.forEach(center => {
-        const lat = center[0];
-        const lng = center[1];
+        let lat = center[0];
+        let lng = center[1];
+        
+        // Mathematically calculate the tangent of the shoreline so waves perfectly hug the coast
+        const dy = 23.7 - lat;
+        const dx = 121.0 - lng;
+        const angleToCenterRad = Math.atan2(dy, dx);
+        
+        // Push the coordinate precisely 15km OFFSHORE (away from the center)
+        // This guarantees the wave never visually overlaps the landmass
+        const offshoreOffset = 0.15; 
+        lat = lat - (Math.sin(angleToCenterRad) * offshoreOffset);
+        lng = lng - (Math.cos(angleToCenterRad) * offshoreOffset);
+
+        const angleToCenterDeg = angleToCenterRad * 180 / Math.PI;
+        const shorelineAngle = angleToCenterDeg + 90;
         
         const intensity = 0.5 + Math.random() * 0.5;
         const wave_height = 0.5 + (Math.random() * 4.0 * intensity) + (intensity * 6.0);
@@ -59,12 +73,6 @@ function generateServerlessData() {
         
         const weight = Math.min(wave_height / 12.0, 1.0);
         const danger_score = weight * 10.0;
-        
-        // Mathematically calculate the tangent of the shoreline so waves perfectly hug the coast
-        const dy = 23.7 - lat;
-        const dx = 121.0 - lng;
-        const angleToCenter = Math.atan2(dy, dx) * 180 / Math.PI;
-        const shorelineAngle = angleToCenter + 90;
         
         points.push({ lat, lng, wave_height, wind_speed, danger_score, direction: "Onshore", angle: shorelineAngle });
     });
@@ -75,9 +83,9 @@ const data = generateServerlessData();
 const markers = [];
 
 data.points.forEach(d => {
-    // Wave size reduced and made very wide to look like a long shoreline wave
-    const baseWidth = 80 + (d.wave_height * 4); 
-    const baseHeight = 35; // fixed thickness of the wave lines
+    // Wave size massively reduced to look like a small natural wave
+    const baseWidth = 35 + (d.wave_height * 1.5); 
+    const baseHeight = 15; // thin, sleek wave lines
     
     const color = getDangerColor(d.danger_score, 0.95);
     const flowSpeed = Math.max(0.4, 2.5 - (d.wind_speed * 0.05));
@@ -92,7 +100,7 @@ data.points.forEach(d => {
     const svgHtml = `
         <div style="width: 100%; height: 100%; transform: rotate(${rotation}deg); display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 0 3px ${color});">
             <svg width="100%" height="100%" viewBox="0 0 200 50">
-                <g stroke="${color}" stroke-width="5" stroke-linecap="round" fill="none">
+                <g stroke="${color}" stroke-width="8" stroke-linecap="round" fill="none">
                     <animateTransform attributeName="transform" type="translate" from="0,0" to="100,0" dur="${flowSpeed}s" repeatCount="indefinite" />
                     <!-- Stacked wave lines -->
                     <path d="M-100 15 Q -75 -5, -50 15 T 0 15 T 50 15 T 100 15 T 150 15 T 200 15 T 250 15 T 300 15" />
