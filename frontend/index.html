@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A3 Maritime Globe</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Globe.gl dependency -->
+    <script src="//unpkg.com/globe.gl"></script>
+</head>
+<body>
+    <div id="globeViz"></div>
+    
+    <!-- UI Overlay -->
+    <div class="overlay">
+        <h1>Maritime Safety Intel</h1>
+        <p>Live CWA Oceanic Gateway</p>
+        
+        <div class="legend">
+            <div class="legend-item"><div class="color-box safe"></div> Calm Waters (Low Risk)</div>
+            <div class="legend-item"><div class="color-box warning"></div> Heavy Weather (Caution)</div>
+            <div class="legend-item"><div class="color-box danger"></div> Storm/Rogue Waves (Danger)</div>
+        </div>
+    </div>
+
+    <script src="main.js?v=7"></script>
+</body>
+</html>

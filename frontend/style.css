@@ -1,0 +1,95 @@
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', sans-serif;
+    background-color: #050510;
+    overflow: hidden;
+    color: white;
+}
+
+#globeViz {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+}
+
+.overlay {
+    position: absolute;
+    top: 2rem;
+    left: 2rem;
+    background: rgba(15, 15, 25, 0.4);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 1.5rem 2rem;
+    border-radius: 16px;
+    pointer-events: none;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    transition: transform 0.3s ease;
+}
+
+.overlay h1 {
+    margin: 0 0 0.5rem 0;
+    font-weight: 600;
+    font-size: 1.5rem;
+    letter-spacing: 1px;
+}
+
+.overlay p {
+    margin: 0 0 1.5rem 0;
+    color: #a0a0b0;
+    font-size: 0.9rem;
+    font-weight: 300;
+}
+
+.legend {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    font-size: 0.85rem;
+    color: #d0d0e0;
+}
+
+.color-box {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    margin-right: 12px;
+}
+
+.safe { background: rgba(255, 255, 255, 0.8); box-shadow: 0 0 8px rgba(255, 255, 255, 0.5); }
+.warning { background: rgba(255, 165, 0, 0.9); box-shadow: 0 0 8px rgba(255, 165, 0, 0.5); }
+.danger { background: rgba(255, 0, 0, 0.9); box-shadow: 0 0 12px rgba(255, 0, 0, 0.8); }
+
+/* Interactive Hover Tooltips */
+.globe-tooltip {
+    background: rgba(15, 15, 25, 0.85);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 1rem;
+    border-radius: 8px;
+    font-family: 'Inter', sans-serif;
+    color: white;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+    line-height: 1.5;
+    font-size: 0.85rem;
+}
+
+.globe-tooltip b {
+    font-size: 1rem;
+    color: #e0e0f0;
+    margin-bottom: 4px;
+    display: inline-block;
+}
+
+@keyframes heave {
+    0% { transform: scale(0.8) translateY(2px); }
+    100% { transform: scale(1.2) translateY(-2px); }
+}
