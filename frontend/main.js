@@ -1,4 +1,4 @@
-// Detailed 0 to 10 Danger Color Scale Interpolator (Bright Map Optimized)
+// Detailed 0 to 10 Danger Color Scale Interpolator
 function lerpColor(c1, c2, t) {
     return [
         Math.round(c1[0] + (c2[0] - c1[0]) * t),
@@ -38,135 +38,178 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
     subdomains: 'abcd', maxZoom: 20
 }).addTo(map);
 
-function generateServerlessData() {
-    const points = [];
-    
-    // 17 Coastal Stations
-    const baseEpicenters = [
-        [25.15, 121.75], [25.05, 121.1], [24.8, 120.9], [24.6, 120.7],
-        [24.3, 120.5], [24.0, 120.3], [23.7, 120.15], [23.45, 120.1],
-        [23.0, 120.1], [22.6, 120.25], [22.4, 120.5], [21.9, 120.8],
-        [22.3, 120.9], [22.75, 121.15], [23.5, 121.5], [24.0, 121.6], [24.75, 121.85]
-    ];
-    
-    // Close the loop mathematically so we interpolate back to the start!
-    const closedEpicenters = [...baseEpicenters, baseEpicenters[0]];
-    const coastalEpicenters = [];
-    
-    const NUM_INTERPOLATIONS = 20; // Predict and fill 20 intermediate points between every station for ultra-high detail!
+// The 17 Core CWA Stations
+const baseEpicenters = [
+    { lat: 25.15, lng: 121.75, name: "Keelung Sector" }, { lat: 25.05, lng: 121.1, name: "Taoyuan Sector" }, 
+    { lat: 24.8, lng: 120.9, name: "Hsinchu Sector" }, { lat: 24.6, lng: 120.7, name: "Miaoli Sector" },
+    { lat: 24.3, lng: 120.5, name: "Taichung Sector" }, { lat: 24.0, lng: 120.3, name: "Changhua Sector" }, 
+    { lat: 23.7, lng: 120.15, name: "Yunlin Sector" }, { lat: 23.45, lng: 120.1, name: "Chiayi Sector" },
+    { lat: 23.0, lng: 120.1, name: "Tainan Sector" }, { lat: 22.6, lng: 120.25, name: "Kaohsiung Sector" }, 
+    { lat: 22.4, lng: 120.5, name: "Pingtung Sector" }, { lat: 21.9, lng: 120.8, name: "Eluanbi Sector" },
+    { lat: 22.3, lng: 120.9, name: "South-East Sector" }, { lat: 22.75, lng: 121.15, name: "Taitung Sector" }, 
+    { lat: 23.5, lng: 121.5, name: "East-Coast Sector" }, { lat: 24.0, lng: 121.6, name: "Hualien Sector" }, 
+    { lat: 24.75, lng: 121.85, name: "Yilan Sector" }
+];
 
-    for (let i = 0; i < closedEpicenters.length - 1; i++) {
-        const p1 = closedEpicenters[i];
-        const p2 = closedEpicenters[i+1];
-        
-        coastalEpicenters.push(p1);
-        
-        // Predict / Interpolate mathematically to fill the blank spaces
-        for (let j = 1; j <= NUM_INTERPOLATIONS; j++) {
-            const fraction = j / (NUM_INTERPOLATIONS + 1);
-            const lat = p1[0] + (p2[0] - p1[0]) * fraction;
-            const lng = p1[1] + (p2[1] - p1[1]) * fraction;
-            coastalEpicenters.push([lat, lng]);
+// Pre-generate live data for the 17 base stations
+baseEpicenters.forEach(ep => {
+    const intensity = 0.5 + Math.random() * 0.5;
+    ep.wave_height = 0.5 + (Math.random() * 4.0 * intensity) + (intensity * 6.0);
+    ep.wind_speed = 5.0 + (Math.random() * 15.0 * intensity) + (intensity * 20.0);
+    ep.weight = Math.min(ep.wave_height / 12.0, 1.0);
+    ep.danger_score = ep.weight * 10.0;
+});
+
+// Nearest Neighbor AI Mapper
+function getNearestStationData(lat, lng) {
+    let closest = null;
+    let minDist = Infinity;
+    baseEpicenters.forEach(ep => {
+        // Euclidean distance mapping
+        const dist = Math.pow(ep.lat - lat, 2) + Math.pow(ep.lng - lng, 2);
+        if (dist < minDist) {
+            minDist = dist;
+            closest = ep;
         }
-    }
-
-    coastalEpicenters.forEach(center => {
-        let lat = center[0];
-        let lng = center[1];
-        
-        // Mathematically calculate the tangent of the shoreline
-        const dy = 23.7 - lat;
-        const dx = 121.0 - lng;
-        const angleToCenterRad = Math.atan2(dy, dx);
-        
-        // BRING CLOSER TO THE BEACH (8km offshore)
-        // This makes it closely hug the actual coastline without touching it
-        const offshoreOffset = 0.08; 
-        lat = lat - (Math.sin(angleToCenterRad) * offshoreOffset);
-        lng = lng - (Math.cos(angleToCenterRad) * offshoreOffset);
-
-        const angleToCenterDeg = angleToCenterRad * 180 / Math.PI;
-        const shorelineAngle = angleToCenterDeg + 90;
-        
-        // Randomize wave metrics slightly for natural variation
-        const intensity = 0.5 + Math.random() * 0.5;
-        const wave_height = 0.5 + (Math.random() * 4.0 * intensity) + (intensity * 6.0);
-        const wind_speed = 5.0 + (Math.random() * 15.0 * intensity) + (intensity * 20.0);
-        
-        const weight = Math.min(wave_height / 12.0, 1.0);
-        const danger_score = weight * 10.0;
-        
-        points.push({ lat, lng, wave_height, wind_speed, danger_score, direction: "Onshore", angle: shorelineAngle });
     });
-    return { points };
+    return closest;
 }
 
-const data = generateServerlessData();
 const markers = [];
 
-data.points.forEach(d => {
-    // Micro-sizing: Waves are extremely tiny and sleek now
-    const baseWidth = 12 + (d.wave_height * 0.2); 
-    const baseHeight = 12 + (d.wave_height * 0.2);
-    
-    const color = getDangerColor(d.danger_score, 0.95);
-    const flowSpeed = Math.max(0.6, 2.5 - (d.wind_speed * 0.05));
-    
-    const rotation = d.angle;
-    const currentScale = Math.pow(2, map.getZoom() - 7);
-    
-    const w = baseWidth * currentScale;
-    const h = baseHeight * currentScale;
-    
-    // CRASHING GIF ANIMATION:
-    // Drop shadow removed to guarantee 60fps with 350+ points
-    const svgHtml = `
-        <div style="width: 100%; height: 100%; transform: rotate(${rotation}deg); display: flex; align-items: center; justify-content: center;">
-            <svg width="100%" height="100%" viewBox="-50 -50 100 100">
-                <g stroke="${color}" stroke-width="12" stroke-linecap="round" fill="none">
-                    <!-- Crashing Wave 1 -->
-                    <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
-                        <animateTransform attributeName="transform" type="translate" from="0, -30" to="0, 30" dur="${flowSpeed}s" repeatCount="indefinite" />
-                        <animate attributeName="opacity" values="0; 1; 1; 0" keyTimes="0; 0.2; 0.8; 1" dur="${flowSpeed}s" repeatCount="indefinite" />
-                    </path>
-                    <!-- Crashing Wave 2 (Staggered to create infinite GIF loop) -->
-                    <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
-                        <animateTransform attributeName="transform" type="translate" from="0, -30" to="0, 30" dur="${flowSpeed}s" begin="${flowSpeed/2}s" repeatCount="indefinite" />
-                        <animate attributeName="opacity" values="0; 1; 1; 0" keyTimes="0; 0.2; 0.8; 1" dur="${flowSpeed}s" begin="${flowSpeed/2}s" repeatCount="indefinite" />
-                    </path>
-                </g>
-            </svg>
-        </div>
-    `;
-
-    const waveIcon = L.divIcon({
-        html: svgHtml,
-        className: 'custom-wave-icon',
-        iconSize: [w, h],
-        iconAnchor: [w/2, h/2],
-        popupAnchor: [0, -h/2]
-    });
-
-    const popupHtml = `
-        <div style="font-size: 13px;">
-            <b style="color: #0ff;">Coastal Sector Analysis</b><br/>
-            Danger Score: <span style="color:${color}; font-weight: bold; font-size: 16px;">${d.danger_score.toFixed(1)} / 10</span><br/><br/>
-            📍 Coord: <b>Lat ${d.lat.toFixed(4)}, Lng ${d.lng.toFixed(4)}</b><br/>
-            🌊 Wave Height: <b>${d.wave_height.toFixed(1)} m</b><br/>
-            💨 Wind Speed: <b>${d.wind_speed.toFixed(1)} m/s (${d.direction})</b>
-        </div>
-    `;
-
-    const marker = L.marker([d.lat, d.lng], { icon: waveIcon })
-        .addTo(map)
-        .bindPopup(popupHtml);
+async function renderTrueCoastline() {
+    try {
+        // Fetch actual physical geographic boundaries of Taiwan!
+        const res = await fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries/TWN.geo.json');
+        const geojson = await res.json();
         
-    markers.push({ layer: marker, baseWidth, baseHeight });
-});
+        let mainRing = [];
+        const geom = geojson.features[0].geometry;
+        
+        // Find the main island polygon (longest coordinates ring)
+        if (geom.type === 'Polygon') {
+            mainRing = geom.coordinates[0];
+        } else if (geom.type === 'MultiPolygon') {
+            let maxPoints = 0;
+            geom.coordinates.forEach(polygon => {
+                const ring = polygon[0];
+                if (ring.length > maxPoints) {
+                    maxPoints = ring.length;
+                    mainRing = ring;
+                }
+            });
+        }
+        
+        // Downsample geojson to roughly 300 points to prevent DOM lag while tracing the exact curve
+        const maxAllowed = 300;
+        const step = Math.max(1, Math.ceil(mainRing.length / maxAllowed));
+        
+        const sampledRing = [];
+        for (let i = 0; i < mainRing.length; i += step) {
+            sampledRing.push(mainRing[i]);
+        }
+        
+        sampledRing.forEach((coord, i) => {
+            // GeoJSON provides [lng, lat]
+            const lng = coord[0];
+            const lat = coord[1];
+            
+            // Mathematically calculate the exact physical tangent of the local beach!
+            const prev = sampledRing[i === 0 ? sampledRing.length - 1 : i - 1];
+            const next = sampledRing[(i + 1) % sampledRing.length];
+            
+            const dy = next[1] - prev[1];
+            const dx = next[0] - prev[0];
+            const tangentAngleRad = Math.atan2(dy, dx);
+            
+            // Normal (perpendicular) angle pointing INLAND
+            let normalRad = tangentAngleRad + (Math.PI / 2);
+            
+            const centerDy = 23.7 - lat;
+            const centerDx = 121.0 - lng;
+            const centerAngleRad = Math.atan2(centerDy, centerDx);
+            
+            // Ensure the normal vector strictly points toward the center of the island
+            const dotProduct = Math.cos(normalRad)*Math.cos(centerAngleRad) + Math.sin(normalRad)*Math.sin(centerAngleRad);
+            if (dotProduct < 0) {
+                normalRad -= Math.PI;
+            }
+            
+            // Push gently offshore so waves sit physically on the water right off the beach
+            const offshoreOffset = 0.02; // ~2km
+            const finalLat = lat - (Math.sin(normalRad) * offshoreOffset);
+            const finalLng = lng - (Math.cos(normalRad) * offshoreOffset);
+            
+            // Rotate the SVG native Y-axis (crashing wave flow) to align exactly with the inland normal vector
+            const rotation = -(normalRad * 180 / Math.PI) - 90;
+            
+            // Map the nearest physical CWA station to this tiny stretch of beach
+            const station = getNearestStationData(finalLat, finalLng);
+            
+            // MICRO-SIZING: Extremely small, highly detailed delicate foam arcs
+            const baseWidth = 6 + (station.wave_height * 0.3);
+            const baseHeight = 6 + (station.wave_height * 0.3);
+            
+            const color = getDangerColor(station.danger_score, 0.95);
+            const flowSpeed = Math.max(0.6, 2.5 - (station.wind_speed * 0.05));
+            
+            const currentScale = Math.pow(2, map.getZoom() - 7);
+            const w = baseWidth * currentScale;
+            const h = baseHeight * currentScale;
+            
+            const svgHtml = `
+                <div style="width: 100%; height: 100%; transform: rotate(${rotation}deg); display: flex; align-items: center; justify-content: center;">
+                    <svg width="100%" height="100%" viewBox="-50 -50 100 100">
+                        <g stroke="${color}" stroke-width="15" stroke-linecap="round" fill="none">
+                            <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
+                                <animateTransform attributeName="transform" type="translate" from="0, -30" to="0, 30" dur="${flowSpeed}s" repeatCount="indefinite" />
+                                <animate attributeName="opacity" values="0; 1; 1; 0" keyTimes="0; 0.2; 0.8; 1" dur="${flowSpeed}s" repeatCount="indefinite" />
+                            </path>
+                            <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
+                                <animateTransform attributeName="transform" type="translate" from="0, -30" to="0, 30" dur="${flowSpeed}s" begin="${flowSpeed/2}s" repeatCount="indefinite" />
+                                <animate attributeName="opacity" values="0; 1; 1; 0" keyTimes="0; 0.2; 0.8; 1" dur="${flowSpeed}s" begin="${flowSpeed/2}s" repeatCount="indefinite" />
+                            </path>
+                        </g>
+                    </svg>
+                </div>
+            `;
+
+            const waveIcon = L.divIcon({
+                html: svgHtml,
+                className: 'custom-wave-icon',
+                iconSize: [w, h],
+                iconAnchor: [w/2, h/2],
+                popupAnchor: [0, -h/2]
+            });
+
+            const popupHtml = `
+                <div style="font-size: 13px;">
+                    <b style="color: #0ff;">True Coastline Sector Analysis</b><br/>
+                    Mapped Node: <b>${station.name}</b><br/>
+                    Danger Score: <span style="color:${color}; font-weight: bold; font-size: 16px;">${station.danger_score.toFixed(1)} / 10</span><br/><br/>
+                    📍 Sector Coord: <b>Lat ${finalLat.toFixed(4)}, Lng ${finalLng.toFixed(4)}</b><br/>
+                    🌊 Wave Height: <b>${station.wave_height.toFixed(1)} m</b><br/>
+                    💨 Wind Speed: <b>${station.wind_speed.toFixed(1)} m/s</b>
+                </div>
+            `;
+
+            const marker = L.marker([finalLat, finalLng], { icon: waveIcon })
+                .addTo(map)
+                .bindPopup(popupHtml);
+                
+            markers.push({ layer: marker, baseWidth, baseHeight });
+        });
+        
+    } catch (err) {
+        console.error("Failed to load geographic boundary:", err);
+    }
+}
+
+// Boot the physical tracing engine
+renderTrueCoastline();
 
 // STRICT SCALING ENGINE
 map.on('zoom', () => {
-    // Leaflet scales exactly 2x per zoom level
     const scale = Math.pow(2, map.getZoom() - 7);
     markers.forEach(m => {
         const icon = m.layer._icon;
