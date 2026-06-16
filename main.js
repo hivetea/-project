@@ -31,96 +31,21 @@ const spriteColorInterpolator = t => {
     }
 };
 
-// Initialize Globe
-const world = Globe()(document.getElementById('globeViz'))
-    .backgroundColor('#050510')
-    .showGlobe(true)
-    .globeImageUrl('//unpkg.com/three-globe/example/img/earth-water.png')
-    
-    // Wave Image (HTML DOM Elements - 100% crash proof from WebGL conflicts)
-    .htmlElementsData([])
-    .htmlLat('lat')
-    .htmlLng('lng')
-    .htmlAltitude(0)
-    .htmlElement(d => {
-        const el = document.createElement('div');
-        const size = 16 + (d.wave_height * 6); // Pixel size of the wave image
-        const color = spriteColorInterpolator(d.weight);
-        
-        // Explicitly size the container so Globe.gl knows how to project it
-        el.style.width = `${size}px`;
-        el.style.height = `${size}px`;
-        el.style.pointerEvents = 'none'; // Let the invisible point below handle hover
-        
-        // Fluid Animated SVG - Dynamic Color, Perfect Transparency, Liquid Animation
-        const duration = 1.0 + ((1.0 - d.weight) * 2.0); // Dangerous = 1s fast ripple. Calm = 3s slow swell.
-        const heaveSpeed = 1.5 + Math.abs((d.lng % 2)); // Dynamic CSS heave speed
-        
-        // Note the transform: translate(-50%, -50%) to perfectly center the wave over the coordinate
-        el.innerHTML = `
-            <svg width="${size}" height="${size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="animation: heave ${heaveSpeed}s infinite alternate ease-in-out; filter: drop-shadow(0 0 12px ${color}); opacity: 0.9; transform: translate(-50%, -50%);">
-              <path fill="${color}" d="M0 60 Q 25 40, 50 60 T 100 60 L 100 100 L 0 100 Z">
-                <animate attributeName="d" 
-                  values="
-                    M0 60 Q 25 40, 50 60 T 100 60 L 100 100 L 0 100 Z;
-                    M0 60 Q 25 80, 50 60 T 100 60 L 100 100 L 0 100 Z;
-                    M0 60 Q 25 40, 50 60 T 100 60 L 100 100 L 0 100 Z" 
-                  dur="${duration}s" 
-                  repeatCount="indefinite" />
-              </path>
-            </svg>
-        `;
-        
-        return el;
-    })
-    
-    // Glowing Hover Cores (For precise Lat/Lng tooltips)
-    .pointsData([])
-    .pointColor(() => 'rgba(255, 255, 255, 0.01)') // Almost invisible
-    .pointRadius(0.01) // Scaled down massively for extreme zoom
-    .pointAltitude(0.001)
-    .pointLabel(d => {
-        const risk = Math.min(d.weight, 1.0);
-        let riskLabel = "Safe (Calm Waters)";
-        if (risk > 0.5) riskLabel = "Caution (Heavy Weather)";
-        if (risk > 0.8) riskLabel = "Danger (Rogue Waves)";
+// Initialize Leaflet Map (Centered on Taiwan)
+const map = L.map('globeViz', {
+    center: [23.7, 121.0],
+    zoom: 8,
+    zoomControl: false // Cleaner UI
+});
 
-        return `
-            <div class="globe-tooltip">
-                <b>Maritime Sector Analysis</b><br/>
-                Status: <span style="color:${colorInterpolator(risk)}">${riskLabel}</span><br/><br/>
-                📍 Coord: <b>Lat ${d.lat.toFixed(4)}, Lng ${d.lng.toFixed(4)}</b><br/>
-                🌊 Wave Height: ${d.wave_height.toFixed(1)} m<br/>
-                💨 Wind Speed: ${d.wind_speed.toFixed(1)} m/s (${d.direction})
-            </div>
-        `;
-    })
-    
-    // Wind Flow Animation (Arcs)
-    .arcStartLat('start_lat')
-    .arcStartLng('start_lng')
-    .arcEndLat('end_lat')
-    .arcEndLng('end_lng')
-    .arcColor('color')
-    .arcDashLength(0.01) // Micro-arcs for zoom
-    .arcDashGap(0.02)
-    .arcDashInitialGap(() => Math.random() * 2)
-    .arcDashAnimateTime(1000)
-    .arcAltitude(0.002)  // Extremely close to the surface
-    .arcStroke(0.1);     // Thinner lines
+// Add Dark Mode Base Map (CartoDB Dark Matter)
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    subdomains: 'abcd',
+    maxZoom: 20
+}).addTo(map);
 
-// Add high-resolution Taiwan map
-fetch('https://raw.githubusercontent.com/g0v/twgeojson/master/json/twCounty2010.geo.json')
-    .then(res => res.json())
-    .then(countries => {
-        world.polygonsData(countries.features)
-            .polygonCapColor(() => '#ffffff')
-            .polygonSideColor(() => 'rgba(200, 200, 200, 0.1)')
-            .polygonStrokeColor(() => 'rgba(150, 150, 150, 0.3)')
-            .polygonAltitude(0.01);
-    });
-
-// Serverless Data Engine (Ported from Rust & Focused on Taiwan Coast)
+// Serverless Data Engine (Focused on Taiwan Coast)
 function generateServerlessData() {
     const points = [];
     const arcs = [];
@@ -168,8 +93,8 @@ function generateServerlessData() {
         const wind_speed = 5.0 + (Math.random() * 15.0 * intensity) + (intensity * 20.0);
         const weight = Math.min(wave_height / 12.0, 1.0);
         
-        // Arc distance is scaled down drastically for the zoomed-in camera
-        const arc_dist = 0.02 + (wind_speed * 0.005);
+        // Arc distance scaled for local 2D view
+        const arc_dist = 0.05 + (wind_speed * 0.005);
         const angle = Math.random() * Math.PI * 2;
         const end_lat = lat + (Math.sin(angle) * arc_dist);
         const end_lng = lng + (Math.cos(angle) * arc_dist);
@@ -183,16 +108,71 @@ function generateServerlessData() {
     return { points, arcs };
 }
 
-// Initialize the Globe exactly ONCE to prevent DOM crashes
-setTimeout(() => {
-    const data = generateServerlessData();
-    world.htmlElementsData(data.points);
-    world.pointsData(data.points);
-    world.arcsData(data.arcs);
-    
-    // Zoom in heavily and lock the camera over Taiwan
-    world.pointOfView({ lat: 23.7, lng: 121.0, altitude: 0.15 }, 2000);
-}, 500);
+// Render Data to Leaflet
+const data = generateServerlessData();
 
-// Disable rotation, we are now a zoomed-in locked map
-world.controls().autoRotate = false;
+data.points.forEach(d => {
+    const size = 16 + (d.wave_height * 6); // Pixel size of the wave image
+    const color = spriteColorInterpolator(d.weight);
+    
+    // Fluid Animated SVG - Dynamic Color, Perfect Transparency, Liquid Animation
+    const duration = 1.0 + ((1.0 - d.weight) * 2.0); // Dangerous = 1s fast ripple. Calm = 3s slow swell.
+    const heaveSpeed = 1.5 + Math.abs((d.lng % 2)); // Dynamic CSS heave speed
+    
+    const svgHtml = `
+        <svg width="${size}" height="${size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="animation: heave ${heaveSpeed}s infinite alternate ease-in-out; filter: drop-shadow(0 0 12px ${color}); opacity: 0.9;">
+          <path fill="${color}" d="M0 60 Q 25 40, 50 60 T 100 60 L 100 100 L 0 100 Z">
+            <animate attributeName="d" 
+              values="
+                M0 60 Q 25 40, 50 60 T 100 60 L 100 100 L 0 100 Z;
+                M0 60 Q 25 80, 50 60 T 100 60 L 100 100 L 0 100 Z;
+                M0 60 Q 25 40, 50 60 T 100 60 L 100 100 L 0 100 Z" 
+              dur="${duration}s" 
+              repeatCount="indefinite" />
+          </path>
+        </svg>
+    `;
+
+    // Create a Custom Leaflet Icon using our SVG
+    const waveIcon = L.divIcon({
+        html: svgHtml,
+        className: 'custom-wave-icon',
+        iconSize: [size, size],
+        iconAnchor: [size/2, size/2], // Center perfectly over the lat/lng
+        popupAnchor: [0, -size/2]
+    });
+
+    const risk = Math.min(d.weight, 1.0);
+    let riskLabel = "Safe (Calm Waters)";
+    if (risk > 0.5) riskLabel = "Caution (Heavy Weather)";
+    if (risk > 0.8) riskLabel = "Danger (Rogue Waves)";
+
+    const popupHtml = `
+        <div style="font-size: 13px;">
+            <b style="color: #0ff;">Maritime Sector Analysis</b><br/>
+            Status: <span style="color:${colorInterpolator(risk)}; font-weight: bold;">${riskLabel}</span><br/><br/>
+            📍 Coord: <b>Lat ${d.lat.toFixed(4)}, Lng ${d.lng.toFixed(4)}</b><br/>
+            🌊 Wave Height: <b>${d.wave_height.toFixed(1)} m</b><br/>
+            💨 Wind Speed: <b>${d.wind_speed.toFixed(1)} m/s (${d.direction})</b>
+        </div>
+    `;
+
+    // Add marker to map
+    L.marker([d.lat, d.lng], { icon: waveIcon })
+        .addTo(map)
+        .bindPopup(popupHtml);
+});
+
+// Render Wind Arcs as Leaflet Polylines
+data.arcs.forEach(arc => {
+    L.polyline([
+        [arc.start_lat, arc.start_lng],
+        [arc.end_lat, arc.end_lng]
+    ], {
+        color: arc.color,
+        weight: 1.5,
+        opacity: 0.6,
+        dashArray: '4, 6', // Simulated dashed wind lines
+        lineCap: 'round'
+    }).addTo(map);
+});
