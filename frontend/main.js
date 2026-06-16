@@ -32,50 +32,27 @@ const map = L.map('globeViz', {
     center: [23.7, 121.0], zoom: 7, zoomControl: false
 });
 
-// Light Map for standard daytime visibility
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    attribution: '&copy; OpenStreetMap contributors',
     subdomains: 'abcd', maxZoom: 20
 }).addTo(map);
 
-// The 17 Core CWA Stations
-const baseEpicenters = [
-    { lat: 25.15, lng: 121.75, name: "Keelung Sector" }, { lat: 25.05, lng: 121.1, name: "Taoyuan Sector" }, 
-    { lat: 24.8, lng: 120.9, name: "Hsinchu Sector" }, { lat: 24.6, lng: 120.7, name: "Miaoli Sector" },
-    { lat: 24.3, lng: 120.5, name: "Taichung Sector" }, { lat: 24.0, lng: 120.3, name: "Changhua Sector" }, 
-    { lat: 23.7, lng: 120.15, name: "Yunlin Sector" }, { lat: 23.45, lng: 120.1, name: "Chiayi Sector" },
-    { lat: 23.0, lng: 120.1, name: "Tainan Sector" }, { lat: 22.6, lng: 120.25, name: "Kaohsiung Sector" }, 
-    { lat: 22.4, lng: 120.5, name: "Pingtung Sector" }, { lat: 21.9, lng: 120.8, name: "Eluanbi Sector" },
-    { lat: 22.3, lng: 120.9, name: "South-East Sector" }, { lat: 22.75, lng: 121.15, name: "Taitung Sector" }, 
-    { lat: 23.5, lng: 121.5, name: "East-Coast Sector" }, { lat: 24.0, lng: 121.6, name: "Hualien Sector" }, 
-    { lat: 24.75, lng: 121.85, name: "Yilan Sector" }
-];
-
-// Pre-generate live data for the 17 base stations
-baseEpicenters.forEach(ep => {
-    const intensity = 0.5 + Math.random() * 0.5;
-    ep.wave_height = 0.5 + (Math.random() * 4.0 * intensity) + (intensity * 6.0);
-    ep.wind_speed = 5.0 + (Math.random() * 15.0 * intensity) + (intensity * 20.0);
-    ep.weight = Math.min(ep.wave_height / 12.0, 1.0);
-    ep.danger_score = ep.weight * 10.0;
-});
+const markers = [];
+const baseEpicenters = [];
 
 // Inverse Distance Weighting (IDW) Spatial Simulation AI
-// Continuously blends marine conditions across all 17 stations for a perfectly smooth geographic gradient
 function simulateMarineConditionsIDW(lat, lng) {
     let sumWeight = 0;
     let sumWaveHeight = 0;
     let sumWindSpeed = 0;
     let sumDanger = 0;
     
-    // We use a power parameter of 2 for standard spatial interpolation
-    const p = 2;
+    const p = 2; // Power parameter
     
     for (let i = 0; i < baseEpicenters.length; i++) {
         const ep = baseEpicenters[i];
         const distSq = Math.pow(ep.lat - lat, 2) + Math.pow(ep.lng - lng, 2);
         
-        // Exact geographic match
         if (distSq < 0.0000001) return {
             wave_height: ep.wave_height,
             wind_speed: ep.wind_speed,
@@ -91,6 +68,8 @@ function simulateMarineConditionsIDW(lat, lng) {
         sumDanger += ep.danger_score * w;
     }
     
+    if (sumWeight === 0) return { wave_height: 0, wind_speed: 0, danger_score: 0 };
+    
     return {
         wave_height: sumWaveHeight / sumWeight,
         wind_speed: sumWindSpeed / sumWeight,
@@ -98,18 +77,14 @@ function simulateMarineConditionsIDW(lat, lng) {
     };
 }
 
-const markers = [];
-
 async function renderTrueCoastline() {
     try {
-        // Fetch actual physical geographic boundaries of Taiwan!
         const res = await fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries/TWN.geo.json');
         const geojson = await res.json();
         
         let mainRing = [];
         const geom = geojson.features[0].geometry;
         
-        // Find the main island polygon (longest coordinates ring)
         if (geom.type === 'Polygon') {
             mainRing = geom.coordinates[0];
         } else if (geom.type === 'MultiPolygon') {
@@ -123,7 +98,6 @@ async function renderTrueCoastline() {
             });
         }
         
-        // Downsample geojson to roughly 300 points to prevent DOM lag while tracing the exact curve
         const maxAllowed = 300;
         const step = Math.max(1, Math.ceil(mainRing.length / maxAllowed));
         
@@ -133,11 +107,9 @@ async function renderTrueCoastline() {
         }
         
         sampledRing.forEach((coord, i) => {
-            // GeoJSON provides [lng, lat]
             const lng = coord[0];
             const lat = coord[1];
             
-            // Mathematically calculate the exact physical tangent of the local beach!
             const prev = sampledRing[i === 0 ? sampledRing.length - 1 : i - 1];
             const next = sampledRing[(i + 1) % sampledRing.length];
             
@@ -145,32 +117,25 @@ async function renderTrueCoastline() {
             const dx = next[0] - prev[0];
             const tangentAngleRad = Math.atan2(dy, dx);
             
-            // Normal (perpendicular) angle pointing INLAND
             let normalRad = tangentAngleRad + (Math.PI / 2);
             
             const centerDy = 23.7 - lat;
             const centerDx = 121.0 - lng;
             const centerAngleRad = Math.atan2(centerDy, centerDx);
             
-            // Ensure the normal vector strictly points toward the center of the island
             const dotProduct = Math.cos(normalRad)*Math.cos(centerAngleRad) + Math.sin(normalRad)*Math.sin(centerAngleRad);
             if (dotProduct < 0) {
                 normalRad -= Math.PI;
             }
             
-            // TIGHT BORDER ANALYSIS
-            // Push gently offshore so waves sit tightly on the exact physical border without clipping bays
-            const offshoreOffset = 0.005; // Tight fit
+            const offshoreOffset = 0.005; 
             const finalLat = lat - (Math.sin(normalRad) * offshoreOffset);
             const finalLng = lng - (Math.cos(normalRad) * offshoreOffset);
             
-            // Rotate the SVG native Y-axis (crashing wave flow) to align exactly with the inland normal vector
             const rotation = -(normalRad * 180 / Math.PI) - 90;
             
-            // Simulate the continuous marine condition at this exact border coordinate using IDW!
             const sim = simulateMarineConditionsIDW(finalLat, finalLng);
             
-            // MICRO-SIZING: Extremely small, highly detailed delicate foam arcs perfectly tracing the border
             const baseWidth = 5 + (sim.wave_height * 0.2);
             const baseHeight = 5 + (sim.wave_height * 0.2);
             
@@ -208,11 +173,10 @@ async function renderTrueCoastline() {
 
             const popupHtml = `
                 <div style="font-size: 13px;">
-                    <b style="color: #0ff;">Simulated Border Analysis</b><br/>
+                    <b style="color: #0ff;">Simulated Coastal Sector</b><br/>
                     Status: <b style="color: #0ff;">IDW Live Tracking</b><br/>
                     Danger Score: <span style="color:${color}; font-weight: bold; font-size: 16px;">${sim.danger_score.toFixed(1)} / 10</span><br/><br/>
-                    📍 Sector Coord: <b>Lat ${finalLat.toFixed(4)}, Lng ${finalLng.toFixed(4)}</b><br/>
-                    🌊 Predicted Wave: <b>${sim.wave_height.toFixed(1)} m</b><br/>
+                    🌊 Predicted Wave (Pierson-Moskowitz): <b>${sim.wave_height.toFixed(1)} m</b><br/>
                     💨 Predicted Wind: <b>${sim.wind_speed.toFixed(1)} m/s</b>
                 </div>
             `;
@@ -229,8 +193,145 @@ async function renderTrueCoastline() {
     }
 }
 
-// Boot the physical tracing engine
-renderTrueCoastline();
+// Deep Ocean Matrix AI (Open-Meteo)
+async function renderDeepOceanGrid() {
+    const lats = [];
+    const lngs = [];
+    
+    // Spawn hex grid over deep ocean
+    for (let lat = 21.0; lat <= 26.0; lat += 0.8) {
+        for (let lng = 119.0; lng <= 123.0; lng += 0.8) {
+            // Cut out the center (Taiwan landmass)
+            const distToCenterSq = Math.pow(lat - 23.7, 2) + Math.pow(lng - 121.0, 2);
+            if (distToCenterSq > 1.2) { // Deep offshore only
+                lats.push(lat.toFixed(2));
+                lngs.push(lng.toFixed(2));
+            }
+        }
+    }
+    
+    if (lats.length === 0) return;
+    
+    // Max API limit is 100 points, so we slice if needed
+    const batchLats = lats.slice(0, 99);
+    const batchLngs = lngs.slice(0, 99);
+    
+    const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${batchLats.join(',')}&longitude=${batchLngs.join(',')}&current=wave_height,wave_direction,ocean_current_velocity,ocean_current_direction`;
+    
+    try {
+        const res = await fetch(url);
+        const dataArray = await res.json();
+        const results = Array.isArray(dataArray) ? dataArray : [dataArray];
+        
+        results.forEach((ocean, i) => {
+            const current = ocean.current;
+            if (!current) return;
+            
+            let wh = current.wave_height;
+            if (wh === null) wh = 1.0;
+            let wd = current.wave_direction;
+            if (wd === null) wd = 0;
+            let cv = current.ocean_current_velocity;
+            if (cv === null) cv = 0;
+            
+            const lat = parseFloat(batchLats[i]);
+            const lng = parseFloat(batchLngs[i]);
+            
+            // Render massive flowing deep sea waves!
+            // SVG Y-axis points down. wave_direction is meteorlogical.
+            const rotation = wd; 
+            
+            // Make them massive but transparent to show deep ocean swells
+            const baseWidth = 40 + (wh * 15);
+            const baseHeight = 40 + (wh * 15);
+            const color = getDangerColor(Math.min(10, wh * 3.0), 0.35); // 35% ghost opacity
+            const flowSpeed = Math.max(0.6, 5.0 - (cv * 2));
+            
+            const currentScale = Math.pow(2, map.getZoom() - 7);
+            const w = baseWidth * currentScale;
+            const h = baseHeight * currentScale;
+            
+            const svgHtml = `
+                <div style="width: 100%; height: 100%; transform: rotate(${rotation}deg); display: flex; align-items: center; justify-content: center;">
+                    <svg width="100%" height="100%" viewBox="-50 -50 100 100">
+                        <g stroke="${color}" stroke-width="4" stroke-linecap="round" fill="none">
+                            <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
+                                <animateTransform attributeName="transform" type="translate" from="0, -30" to="0, 30" dur="${flowSpeed}s" repeatCount="indefinite" />
+                                <animate attributeName="opacity" values="0; 1; 1; 0" keyTimes="0; 0.2; 0.8; 1" dur="${flowSpeed}s" repeatCount="indefinite" />
+                            </path>
+                        </g>
+                    </svg>
+                </div>
+            `;
+            
+            const waveIcon = L.divIcon({
+                html: svgHtml,
+                className: 'custom-wave-icon',
+                iconSize: [w, h],
+                iconAnchor: [w/2, h/2]
+            });
+            
+            const marker = L.marker([lat, lng], { icon: waveIcon })
+                .addTo(map)
+                .bindPopup(`
+                    <div style="font-size: 13px;">
+                        <b style="color:#0ff">Copernicus Satellite Node</b><br/>
+                        🌊 Deep Sea Wave Height: <b>${wh.toFixed(1)} m</b><br/>
+                        💨 Ocean Current Velocity: <b>${cv.toFixed(1)} km/h</b><br/>
+                        🧭 Flow Direction: <b>${wd.toFixed(0)}°</b>
+                    </div>
+                `);
+                
+            markers.push({ layer: marker, baseWidth, baseHeight });
+        });
+    } catch(err) {
+        console.error("Open-Meteo failure", err);
+    }
+}
+
+// Master Boot Sequence
+async function bootEngine() {
+    try {
+        // 1. Load Live Coastal Stations
+        const res = await fetch('coastal_stations.json');
+        const rawStations = await res.json();
+        
+        rawStations.forEach(s => {
+            try {
+                const coords = s.GeoInfo.Coordinates.find(c => c.CoordinateName === 'WGS84');
+                const lat = parseFloat(coords.StationLatitude);
+                const lng = parseFloat(coords.StationLongitude);
+                const name = s.StationName;
+                
+                let wind_speed = parseFloat(s.WeatherElement.WindSpeed);
+                if (isNaN(wind_speed) || wind_speed < 0) wind_speed = 3.0;
+                
+                // PIERSON-MOSKOWITZ WAVE PREDICTION ALGORITHM
+                // Formula: WaveHeight = 0.22 * (U^2 / g)
+                const g = 9.81;
+                let wave_height = 0.22 * (Math.pow(wind_speed, 2) / g);
+                if (wave_height < 0.2) wave_height = 0.2; 
+                
+                // Mathematical danger score mapping
+                const danger_score = Math.min(10.0, wave_height * 3.5);
+                
+                baseEpicenters.push({ lat, lng, name, wind_speed, wave_height, danger_score });
+            } catch(e) {}
+        });
+        
+        // 2. Boot IDW Coastal Prediction Simulation
+        await renderTrueCoastline();
+        
+        // 3. Boot Deep Sea Ocean Current Satellites
+        await renderDeepOceanGrid();
+        
+    } catch(err) {
+        console.error("Boot sequence failed:", err);
+    }
+}
+
+// Start Engine
+bootEngine();
 
 // STRICT SCALING ENGINE
 map.on('zoom', () => {
