@@ -77,8 +77,8 @@ const world = Globe()(document.getElementById('globeViz'))
     // Glowing Hover Cores (For precise Lat/Lng tooltips)
     .pointsData([])
     .pointColor(() => 'rgba(255, 255, 255, 0.01)') // Almost invisible
-    .pointRadius(1.2)
-    .pointAltitude(0.01)
+    .pointRadius(0.01) // Scaled down massively for extreme zoom
+    .pointAltitude(0.001)
     .pointLabel(d => {
         const risk = Math.min(d.weight, 1.0);
         let riskLabel = "Safe (Calm Waters)";
@@ -102,15 +102,15 @@ const world = Globe()(document.getElementById('globeViz'))
     .arcEndLat('end_lat')
     .arcEndLng('end_lng')
     .arcColor('color')
-    .arcDashLength(0.1) // Shortened as requested
-    .arcDashGap(1)      // Shortened gap
+    .arcDashLength(0.01) // Micro-arcs for zoom
+    .arcDashGap(0.02)
     .arcDashInitialGap(() => Math.random() * 2)
     .arcDashAnimateTime(1000)
-    .arcAltitude(0.015)
-    .arcStroke(0.3);
+    .arcAltitude(0.002)  // Extremely close to the surface
+    .arcStroke(0.1);     // Thinner lines
 
-// Add custom white landmasses
-fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json')
+// Add high-resolution Taiwan map
+fetch('https://raw.githubusercontent.com/g0v/twgeojson/master/json/twCounty2010.geo.json')
     .then(res => res.json())
     .then(countries => {
         world.polygonsData(countries.features)
@@ -120,41 +120,56 @@ fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries.g
             .polygonAltitude(0.01);
     });
 
-// Serverless Data Engine (Ported from Rust)
+// Serverless Data Engine (Ported from Rust & Focused on Taiwan Coast)
 function generateServerlessData() {
     const points = [];
     const arcs = [];
     
-    // Epicenters strictly in deep ocean (Tightened to avoid any land clipping)
-    const epicenters = [
-        [40.0, -40.0, 10.0],    // North Atlantic
-        [0.0, -30.0, 15.0],     // Central Atlantic
-        [-45.0, 0.0, 15.0],     // South Atlantic / Southern Ocean
-        [-25.0, 80.0, 15.0],    // Indian Ocean
-        [40.0, 175.0, 15.0],    // North Pacific (Moved East to avoid Russia/Japan)
-        [0.0, -150.0, 25.0],    // Central Pacific
-        [-40.0, -130.0, 20.0],  // South Pacific
-        [-10.0, -100.0, 15.0],  // East Pacific
-        [-55.0, 120.0, 10.0],   // Southern Ocean
+    // Coastal Epicenters tightly wrapping the Taiwan Island
+    const coastalEpicenters = [
+        [25.15, 121.75], // Keelung
+        [25.05, 121.1],  // Taoyuan
+        [24.8, 120.9],   // Hsinchu
+        [24.6, 120.7],   // Miaoli
+        [24.3, 120.5],   // Taichung
+        [24.0, 120.3],   // Changhua
+        [23.7, 120.15],  // Yunlin
+        [23.45, 120.1],  // Chiayi
+        [23.0, 120.1],   // Tainan
+        [22.6, 120.25],  // Kaohsiung
+        [22.4, 120.5],   // Pingtung
+        [21.9, 120.8],   // Kenting
+        [22.3, 120.9],   // Taitung S
+        [22.75, 121.15], // Taitung
+        [23.5, 121.5],   // Hualien S
+        [24.0, 121.6],   // Hualien
+        [24.75, 121.85]  // Yilan
     ];
 
+    // 0.18 mathematical degrees is roughly 20km!
+    const radius = 0.18;
+
     for (let i = 0; i < 350; i++) {
-        const center = epicenters[Math.floor(Math.random() * epicenters.length)];
+        const center = coastalEpicenters[Math.floor(Math.random() * coastalEpicenters.length)];
         
-        const lat_offset = (Math.random() * 2 - 1) * center[2];
-        const lng_offset = (Math.random() * 2 - 1) * center[2];
+        // Random polar coordinates within the 20km radius
+        const r = Math.random() * radius;
+        const theta = Math.random() * Math.PI * 2;
+        
+        const lat_offset = r * Math.sin(theta);
+        const lng_offset = r * Math.cos(theta);
         
         const lat = center[0] + lat_offset;
         const lng = center[1] + lng_offset;
         
-        const dist = Math.sqrt((lat_offset * lat_offset) + (lng_offset * lng_offset)) / center[2];
-        const intensity = 1.0 - Math.min(dist, 1.0);
+        const intensity = 1.0 - (r / radius); // Stronger near the coast
         
         const wave_height = 0.5 + (Math.random() * 4.0 * intensity) + (intensity * 6.0);
         const wind_speed = 5.0 + (Math.random() * 15.0 * intensity) + (intensity * 20.0);
         const weight = Math.min(wave_height / 12.0, 1.0);
         
-        const arc_dist = 5.0 + (wind_speed * 0.1);
+        // Arc distance is scaled down drastically for the zoomed-in camera
+        const arc_dist = 0.02 + (wind_speed * 0.005);
         const angle = Math.random() * Math.PI * 2;
         const end_lat = lat + (Math.sin(angle) * arc_dist);
         const end_lng = lng + (Math.cos(angle) * arc_dist);
@@ -168,14 +183,16 @@ function generateServerlessData() {
     return { points, arcs };
 }
 
-// Initialize the Globe exactly ONCE to prevent 350 DOM elements from continuously crashing and respawning
+// Initialize the Globe exactly ONCE to prevent DOM crashes
 setTimeout(() => {
     const data = generateServerlessData();
     world.htmlElementsData(data.points);
     world.pointsData(data.points);
     world.arcsData(data.arcs);
-}, 500); // 500ms delay ensures the Globe.gl WebGL camera is fully locked and mounted before projection math runs!
+    
+    // Zoom in heavily and lock the camera over Taiwan
+    world.pointOfView({ lat: 23.7, lng: 121.0, altitude: 0.15 }, 2000);
+}, 500);
 
-// Auto-rotate majestically (Very slow speed requested by user)
-world.controls().autoRotate = true;
-world.controls().autoRotateSpeed = 0.05;
+// Disable rotation, we are now a zoomed-in locked map
+world.controls().autoRotate = false;
