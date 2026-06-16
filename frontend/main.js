@@ -237,12 +237,12 @@ function drawUnifiedCoastline() {
             }
         });
         
-        let statusHtml = `Status: <b style="color: #0ff;">Local Wind Track</b>`;
+        let statusHtml = `狀態: <b style="color: #0ff;">局部風浪</b>`;
         
         if (collisionSwell > 0) {
             finalWaveHeight += (collisionSwell * 0.8); // 80% physical energy transfer
             finalDangerScore += (collisionSwell * 4.0); // Spikes danger massively
-            statusHtml = `Status: <b style="color: #ff3300;">⚠️ Offshore Swell Collision Detected</b>`;
+            statusHtml = `狀態: <b style="color: #ff3300;">⚠️ 偵測到外海湧浪碰撞</b>`;
         }
         
         // ------------------------------------
@@ -287,11 +287,11 @@ function drawUnifiedCoastline() {
 
         const popupHtml = `
             <div style="font-size: 13px;">
-                <b style="color: #0ff;">Simulated Coastal Sector</b><br/>
+                <b style="color: #0ff;">海岸模擬區段</b><br/>
                 ${statusHtml}<br/>
-                Unified Danger Score: <span style="color:${color}; font-weight: bold; font-size: 16px;">${Math.min(10.0, finalDangerScore).toFixed(1)} / 10</span><br/><br/>
-                🌊 Net Wave Swell: <b>${finalWaveHeight.toFixed(1)} m</b><br/>
-                💨 IDW Local Wind: <b>${sim.wind_speed.toFixed(1)} m/s</b>
+                綜合危險指數: <span style="color:${color}; font-weight: bold; font-size: 16px;">${Math.min(10.0, finalDangerScore).toFixed(1)} / 10</span><br/><br/>
+                🌊 淨浪高: <b>${finalWaveHeight.toFixed(1)} 公尺</b><br/>
+                💨 局部風速 (IDW): <b>${sim.wind_speed.toFixed(1)} 公尺/秒</b>
             </div>
         `;
 
@@ -307,7 +307,7 @@ function drawUnifiedCoastline() {
 function drawDeepOceanGrid() {
     globalDeepSeaNodes.forEach(node => {
         let rotation = node.wd; 
-        let physicsStatus = "Free Flowing";
+        let physicsStatus = "自由流動";
         
         let closestCoastPoint = null;
         let minDistSq = Infinity;
@@ -337,7 +337,7 @@ function drawDeepOceanGrid() {
             const dotProduct = Math.cos(mathFlowRad)*Math.cos(normalRad) + Math.sin(mathFlowRad)*Math.sin(normalRad);
             
             if (dotProduct > 0.15) {
-                physicsStatus = "Deflected by Coastline";
+                physicsStatus = "受海岸線偏折";
                 const dotT1 = Math.cos(mathFlowRad)*Math.cos(tangentRad) + Math.sin(mathFlowRad)*Math.sin(tangentRad);
                 const dotT2 = Math.cos(mathFlowRad)*Math.cos(tangentRad + Math.PI) + Math.sin(mathFlowRad)*Math.sin(tangentRad + Math.PI);
                 const finalMathFlow = dotT1 > dotT2 ? tangentRad : (tangentRad + Math.PI);
@@ -381,11 +381,11 @@ function drawDeepOceanGrid() {
             .addTo(map)
             .bindPopup(`
                 <div style="font-size: 13px;">
-                    <b style="color:#0ff">Copernicus Satellite Node</b><br/>
-                    Physics: <b style="color:#ffaa00">${physicsStatus}</b><br/>
-                    🌊 Deep Sea Wave Height: <b>${node.wh.toFixed(1)} m</b><br/>
-                    💨 Ocean Current Velocity: <b>${node.cv.toFixed(1)} km/h</b><br/>
-                    🧭 Flow Direction: <b>${node.wd.toFixed(0)}°</b>
+                    <b style="color:#0ff">哥白尼衛星節點</b><br/>
+                    物理狀態: <b style="color:#ffaa00">${physicsStatus}</b><br/>
+                    🌊 深海浪高: <b>${node.wh.toFixed(1)} 公尺</b><br/>
+                    💨 洋流流速: <b>${node.cv.toFixed(1)} 公里/小時</b><br/>
+                    🧭 流向: <b>${node.wd.toFixed(0)}°</b>
                 </div>
             `);
             
