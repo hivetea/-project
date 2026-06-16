@@ -211,9 +211,9 @@ async function renderDeepOceanGrid() {
     const lats = [];
     const lngs = [];
     
-    // Spawn hex grid over deep ocean
-    for (let lat = 21.0; lat <= 26.0; lat += 0.8) {
-        for (let lng = 119.0; lng <= 123.0; lng += 0.8) {
+    // Spawn dense hex grid over deep ocean (0.3 step = ~33km)
+    for (let lat = 21.0; lat <= 26.0; lat += 0.3) {
+        for (let lng = 119.0; lng <= 123.0; lng += 0.3) {
             
             // Check true distance to land using the geojson polygon
             let minDistSq = Infinity;
@@ -226,149 +226,163 @@ async function renderDeepOceanGrid() {
                 minDistSq = Math.pow(lat - 23.7, 2) + Math.pow(lng - 121.0, 2);
             }
 
-            const insideLand = trueCoastlineRing.length > 0 && isPointInPolygon([lng, lat], trueCoastlineRing);
+            // Hex staggered offset to create interlocking honeycomb grid
+            const hexOffset = (Math.round(lat / 0.3) % 2 === 0) ? 0 : 0.15;
+            const finalLng = lng + hexOffset;
+
+            const insideLand = trueCoastlineRing.length > 0 && isPointInPolygon([finalLng, lat], trueCoastlineRing);
 
             // Exclude nodes that are physically inside land or too close to the beach (~15km)
             if (!insideLand && minDistSq > 0.02) {
                 lats.push(lat.toFixed(2));
-                lngs.push(lng.toFixed(2));
+                lngs.push(finalLng.toFixed(2));
             }
         }
     }
     
     if (lats.length === 0) return;
     
-    // Max API limit is 100 points, so we slice if needed
-    const batchLats = lats.slice(0, 99);
-    const batchLngs = lngs.slice(0, 99);
+    // Chunk requests to bypass Open-Meteo 100 point limit
+    const chunkSize = 90;
+    const fetchPromises = [];
     
-    const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${batchLats.join(',')}&longitude=${batchLngs.join(',')}&current=wave_height,wave_direction,ocean_current_velocity,ocean_current_direction`;
+    for (let i = 0; i < lats.length; i += chunkSize) {
+        const batchLats = lats.slice(i, i + chunkSize);
+        const batchLngs = lngs.slice(i, i + chunkSize);
+        const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${batchLats.join(',')}&longitude=${batchLngs.join(',')}&current=wave_height,wave_direction,ocean_current_velocity,ocean_current_direction`;
+        
+        fetchPromises.push(
+            fetch(url).then(res => res.json()).then(data => ({ data, batchLats, batchLngs }))
+        );
+    }
     
     try {
-        const res = await fetch(url);
-        const dataArray = await res.json();
-        const results = Array.isArray(dataArray) ? dataArray : [dataArray];
+        const responses = await Promise.all(fetchPromises);
         
-        results.forEach((ocean, i) => {
-            const current = ocean.current;
-            if (!current) return;
+        responses.forEach(({ data, batchLats, batchLngs }) => {
+            const dataArray = Array.isArray(data) ? data : [data];
             
-            let wh = current.wave_height;
-            if (wh === null) wh = 1.0;
-            let wd = current.wave_direction;
-            if (wd === null) wd = 0;
-            let cv = current.ocean_current_velocity;
-            if (cv === null) cv = 0;
-            
-            const lat = parseFloat(batchLats[i]);
-            const lng = parseFloat(batchLngs[i]);
-            
-            let rotation = wd; 
-            let physicsStatus = "Free Flowing";
-            
-            // ==========================================
-            // PHYSICS ENGINE: Coastal Deflection System
-            // ==========================================
-            let closestCoastPoint = null;
-            let minDistSq = Infinity;
-            let closestIndex = -1;
-            
-            trueCoastlineRing.forEach((coord, idx) => {
-                const dist = Math.pow(coord[1] - lat, 2) + Math.pow(coord[0] - lng, 2);
-                if (dist < minDistSq) {
-                    minDistSq = dist;
-                    closestCoastPoint = coord;
-                    closestIndex = idx;
-                }
-            });
-            
-            // If the current is near the coast (within ~60km)
-            if (minDistSq < 0.3) {
-                const prev = trueCoastlineRing[closestIndex === 0 ? trueCoastlineRing.length - 1 : closestIndex - 1];
-                const next = trueCoastlineRing[(closestIndex + 1) % trueCoastlineRing.length];
+            dataArray.forEach((ocean, i) => {
+                const current = ocean.current;
+                if (!current) return;
                 
-                const dy = next[1] - prev[1];
-                const dx = next[0] - prev[0];
-                const tangentRad = Math.atan2(dy, dx);
-                let normalRad = tangentRad + (Math.PI / 2);
+                let wh = current.wave_height;
+                if (wh === null) wh = 1.0;
+                let wd = current.wave_direction;
+                if (wd === null) wd = 0;
+                let cv = current.ocean_current_velocity;
+                if (cv === null) cv = 0;
                 
-                // Ensure normal points inland
-                const centerDy = 23.7 - closestCoastPoint[1];
-                const centerDx = 121.0 - closestCoastPoint[0];
-                const centerAngleRad = Math.atan2(centerDy, centerDx);
-                if (Math.cos(normalRad)*Math.cos(centerAngleRad) + Math.sin(normalRad)*Math.sin(centerAngleRad) < 0) {
-                    normalRad -= Math.PI;
-                }
+                const lat = parseFloat(batchLats[i]);
+                const lng = parseFloat(batchLngs[i]);
                 
-                // Calculate Ocean Flow vector in standard math radians
-                const mathFlowRad = (90 - (wd + 180)) * Math.PI / 180;
+                let rotation = wd; 
+                let physicsStatus = "Free Flowing";
                 
-                // Dot product determines if it is hitting the landmass (>0 means hitting)
-                const dotProduct = Math.cos(mathFlowRad)*Math.cos(normalRad) + Math.sin(mathFlowRad)*Math.sin(normalRad);
+                // ==========================================
+                // PHYSICS ENGINE: Coastal Deflection System
+                // ==========================================
+                let closestCoastPoint = null;
+                let minDistSq = Infinity;
+                let closestIndex = -1;
                 
-                if (dotProduct > 0.15) {
-                    physicsStatus = "Deflected by Coastline";
-                    // It's crashing into Taiwan! Deflect it to run parallel to the beach.
-                    const dotT1 = Math.cos(mathFlowRad)*Math.cos(tangentRad) + Math.sin(mathFlowRad)*Math.sin(tangentRad);
-                    const dotT2 = Math.cos(mathFlowRad)*Math.cos(tangentRad + Math.PI) + Math.sin(mathFlowRad)*Math.sin(tangentRad + Math.PI);
+                trueCoastlineRing.forEach((coord, idx) => {
+                    const dist = Math.pow(coord[1] - lat, 2) + Math.pow(coord[0] - lng, 2);
+                    if (dist < minDistSq) {
+                        minDistSq = dist;
+                        closestCoastPoint = coord;
+                        closestIndex = idx;
+                    }
+                });
+                
+                // If the current is near the coast (within ~60km)
+                if (minDistSq < 0.3) {
+                    const prev = trueCoastlineRing[closestIndex === 0 ? trueCoastlineRing.length - 1 : closestIndex - 1];
+                    const next = trueCoastlineRing[(closestIndex + 1) % trueCoastlineRing.length];
                     
-                    const finalMathFlow = dotT1 > dotT2 ? tangentRad : (tangentRad + Math.PI);
+                    const dy = next[1] - prev[1];
+                    const dx = next[0] - prev[0];
+                    const tangentRad = Math.atan2(dy, dx);
+                    let normalRad = tangentRad + (Math.PI / 2);
                     
-                    // Translate math flow back to SVG rotation
-                    rotation = -(finalMathFlow * 180 / Math.PI) - 90;
+                    // Ensure normal points inland
+                    const centerDy = 23.7 - closestCoastPoint[1];
+                    const centerDx = 121.0 - closestCoastPoint[0];
+                    const centerAngleRad = Math.atan2(centerDy, centerDx);
+                    if (Math.cos(normalRad)*Math.cos(centerAngleRad) + Math.sin(normalRad)*Math.sin(centerAngleRad) < 0) {
+                        normalRad -= Math.PI;
+                    }
+                    
+                    // Calculate Ocean Flow vector in standard math radians
+                    const mathFlowRad = (90 - (wd + 180)) * Math.PI / 180;
+                    
+                    // Dot product determines if it is hitting the landmass (>0 means hitting)
+                    const dotProduct = Math.cos(mathFlowRad)*Math.cos(normalRad) + Math.sin(mathFlowRad)*Math.sin(normalRad);
+                    
+                    if (dotProduct > 0.15) {
+                        physicsStatus = "Deflected by Coastline";
+                        // It's crashing into Taiwan! Deflect it to run parallel to the beach.
+                        const dotT1 = Math.cos(mathFlowRad)*Math.cos(tangentRad) + Math.sin(mathFlowRad)*Math.sin(tangentRad);
+                        const dotT2 = Math.cos(mathFlowRad)*Math.cos(tangentRad + Math.PI) + Math.sin(mathFlowRad)*Math.sin(tangentRad + Math.PI);
+                        
+                        const finalMathFlow = dotT1 > dotT2 ? tangentRad : (tangentRad + Math.PI);
+                        
+                        // Translate math flow back to SVG rotation
+                        rotation = -(finalMathFlow * 180 / Math.PI) - 90;
+                    }
                 }
-            }
-            
-            // Increase visibility significantly so currents are clearly seen
-            const baseWidth = 40 + (wh * 15);
-            const baseHeight = 40 + (wh * 15);
-            
-            // 85% opacity, and force a bright color if it's deflected
-            let color = getDangerColor(Math.min(10, wh * 3.0), 0.85); 
-            if (physicsStatus === "Deflected by Coastline") {
-                color = getDangerColor(8.0, 0.95); // Force bright orange for deflected crashing waves
-            }
+                
+                // Smaller, more reasonable dense sizing
+                const baseWidth = 15 + (wh * 5);
+                const baseHeight = 15 + (wh * 5);
+                
+                // 65% opacity, reasonable colors
+                let color = getDangerColor(Math.min(10, wh * 3.0), 0.65); 
+                if (physicsStatus === "Deflected by Coastline") {
+                    color = getDangerColor(Math.min(10, wh * 3.0 + 2.0), 0.85); // Slightly brighter
+                }
 
-            // Thicker stroke for better visibility
-            const flowSpeed = Math.max(0.6, 5.0 - (cv * 2));
-            
-            const currentScale = Math.pow(2, map.getZoom() - 7);
-            const w = baseWidth * currentScale;
-            const h = baseHeight * currentScale;
-            
-            const svgHtml = `
-                <div style="width: 100%; height: 100%; transform: rotate(${rotation}deg); display: flex; align-items: center; justify-content: center;">
-                    <svg width="100%" height="100%" viewBox="-50 -50 100 100">
-                        <g stroke="${color}" stroke-width="8" stroke-linecap="round" fill="none">
-                            <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
-                                <animateTransform attributeName="transform" type="translate" from="0, -30" to="0, 30" dur="${flowSpeed}s" repeatCount="indefinite" />
-                                <animate attributeName="opacity" values="0; 1; 1; 0" keyTimes="0; 0.2; 0.8; 1" dur="${flowSpeed}s" repeatCount="indefinite" />
-                            </path>
-                        </g>
-                    </svg>
-                </div>
-            `;
-            
-            const waveIcon = L.divIcon({
-                html: svgHtml,
-                className: 'custom-wave-icon',
-                iconSize: [w, h],
-                iconAnchor: [w/2, h/2]
-            });
-            
-            const marker = L.marker([lat, lng], { icon: waveIcon })
-                .addTo(map)
-                .bindPopup(`
-                    <div style="font-size: 13px;">
-                        <b style="color:#0ff">Copernicus Satellite Node</b><br/>
-                        Physics: <b style="color:#ffaa00">${physicsStatus}</b><br/>
-                        🌊 Deep Sea Wave Height: <b>${wh.toFixed(1)} m</b><br/>
-                        💨 Ocean Current Velocity: <b>${cv.toFixed(1)} km/h</b><br/>
-                        🧭 Flow Direction: <b>${wd.toFixed(0)}°</b>
-                    </div>
-                `);
+                // Thinner stroke for dense grid
+                const flowSpeed = Math.max(0.6, 5.0 - (cv * 2));
                 
-            markers.push({ layer: marker, baseWidth, baseHeight });
+                const currentScale = Math.pow(2, map.getZoom() - 7);
+                const w = baseWidth * currentScale;
+                const h = baseHeight * currentScale;
+                
+                const svgHtml = `
+                    <div style="width: 100%; height: 100%; transform: rotate(${rotation}deg); display: flex; align-items: center; justify-content: center;">
+                        <svg width="100%" height="100%" viewBox="-50 -50 100 100">
+                            <g stroke="${color}" stroke-width="4" stroke-linecap="round" fill="none">
+                                <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
+                                    <animateTransform attributeName="transform" type="translate" from="0, -30" to="0, 30" dur="${flowSpeed}s" repeatCount="indefinite" />
+                                    <animate attributeName="opacity" values="0; 1; 1; 0" keyTimes="0; 0.2; 0.8; 1" dur="${flowSpeed}s" repeatCount="indefinite" />
+                                </path>
+                            </g>
+                        </svg>
+                    </div>
+                `;
+                
+                const waveIcon = L.divIcon({
+                    html: svgHtml,
+                    className: 'custom-wave-icon',
+                    iconSize: [w, h],
+                    iconAnchor: [w/2, h/2]
+                });
+                
+                const marker = L.marker([lat, lng], { icon: waveIcon })
+                    .addTo(map)
+                    .bindPopup(`
+                        <div style="font-size: 13px;">
+                            <b style="color:#0ff">Copernicus Satellite Node</b><br/>
+                            Physics: <b style="color:#ffaa00">${physicsStatus}</b><br/>
+                            🌊 Deep Sea Wave Height: <b>${wh.toFixed(1)} m</b><br/>
+                            💨 Ocean Current Velocity: <b>${cv.toFixed(1)} km/h</b><br/>
+                            🧭 Flow Direction: <b>${wd.toFixed(0)}°</b>
+                        </div>
+                    `);
+                    
+                markers.push({ layer: marker, baseWidth, baseHeight });
+            });
         });
     } catch(err) {
         console.error("Open-Meteo failure", err);
