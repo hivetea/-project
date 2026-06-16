@@ -193,6 +193,19 @@ async function renderTrueCoastline() {
     }
 }
 
+// Point-in-Polygon algorithm to strictly detect if a coordinate is on land
+function isPointInPolygon(point, vs) {
+    let x = point[0], y = point[1];
+    let inside = false;
+    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+        let xi = vs[i][0], yi = vs[i][1];
+        let xj = vs[j][0], yj = vs[j][1];
+        let intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
 // Deep Ocean Matrix AI (Open-Meteo) with Coastal Deflection Physics
 async function renderDeepOceanGrid() {
     const lats = [];
@@ -213,8 +226,10 @@ async function renderDeepOceanGrid() {
                 minDistSq = Math.pow(lat - 23.7, 2) + Math.pow(lng - 121.0, 2);
             }
 
-            // Exclude nodes that are physically inside or too close to land (~30km)
-            if (minDistSq > 0.1) {
+            const insideLand = trueCoastlineRing.length > 0 && isPointInPolygon([lng, lat], trueCoastlineRing);
+
+            // Exclude nodes that are physically inside land or too close to the beach (~15km)
+            if (!insideLand && minDistSq > 0.02) {
                 lats.push(lat.toFixed(2));
                 lngs.push(lng.toFixed(2));
             }
