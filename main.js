@@ -1,65 +1,78 @@
-// Maps a danger weight (0.0 to 1.0) to a gradient optimized for Light Maps
-const colorInterpolator = t => {
-    if (t < 0.5) return `rgba(20, 100, 255, 0.95)`;  // Safe: Blue
-    else if (t < 0.8) return `rgba(255, 140, 0, 0.95)`; // Caution: Orange
-    else return `rgba(255, 30, 30, 0.95)`;           // Danger: Red
-};
+// Detailed 0 to 10 Danger Color Scale Interpolator
+function lerpColor(c1, c2, t) {
+    return [
+        Math.round(c1[0] + (c2[0] - c1[0]) * t),
+        Math.round(c1[1] + (c2[1] - c1[1]) * t),
+        Math.round(c1[2] + (c2[2] - c1[2]) * t)
+    ];
+}
 
-const spriteColorInterpolator = t => {
-    if (t < 0.5) return `rgb(20, 100, 255)`;
-    else if (t < 0.8) return `rgb(255, 140, 0)`;
-    else return `rgb(255, 30, 30)`;
-};
+function getDangerColor(score, alpha = 1.0) {
+    const stops = [
+        { val: 0.0, color: [20, 100, 255] },   // 0: Deep Blue (Safe)
+        { val: 2.5, color: [0, 255, 255] },    // 2.5: Cyan
+        { val: 5.0, color: [255, 255, 0] },    // 5: Yellow
+        { val: 7.5, color: [255, 140, 0] },    // 7.5: Orange
+        { val: 10.0, color: [255, 30, 30] }    // 10: Red (Extreme Danger)
+    ];
+    
+    let s = Math.max(0, Math.min(10, score));
+    let lower = stops[0], upper = stops[stops.length - 1];
+    
+    for (let i = 0; i < stops.length - 1; i++) {
+        if (s >= stops[i].val && s <= stops[i+1].val) {
+            lower = stops[i];
+            upper = stops[i+1];
+            break;
+        }
+    }
+    
+    let t = (upper.val === lower.val) ? 0 : (s - lower.val) / (upper.val - lower.val);
+    let rgb = lerpColor(lower.color, upper.color, t);
+    
+    return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+}
 
-// Initialize Leaflet Map (Centered on Taiwan)
+// Initialize Leaflet Map
 const map = L.map('globeViz', {
     center: [23.7, 121.0],
     zoom: 7,
-    zoomControl: false // Cleaner UI
+    zoomControl: false
 });
 
-// Add Light Mode Base Map (CartoDB Light All)
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
     subdomains: 'abcd',
     maxZoom: 20
 }).addTo(map);
 
-// Serverless Data Engine (Continuous Predictive Grid with Land Masking)
 function generateServerlessData() {
     const points = [];
     
-    // Strict Taiwan Bounding Polygon (With safety margin to prevent inland waves)
+    // Strict Taiwan Bounding Polygon
     const taiwanPolygon = [
         [25.4, 121.7], [25.1, 120.8], [24.5, 120.1], [24.0, 119.8],
         [23.5, 119.7], [23.0, 119.8], [22.4, 120.0], [21.8, 120.6],
         [22.2, 121.2], [23.0, 121.5], [24.0, 121.8], [24.5, 122.1], [25.2, 122.2], [25.4, 121.7]
     ];
 
-    // Standard Ray-Casting algorithm for Point-In-Polygon
     function isPointInPolygon(lat, lng, vs) {
         let inside = false;
         for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-            let xi = vs[i][0], yi = vs[i][1];
-            let xj = vs[j][0], yj = vs[j][1];
-            let intersect = ((yi > lng) != (yj > lng)) && (lat < (xj - xi) * (lng - yi) / (yj - yi) + xi);
-            if (intersect) inside = !inside;
+            let xi = vs[i][0], yi = vs[i][1], xj = vs[j][0], yj = vs[j][1];
+            if (((yi > lng) != (yj > lng)) && (lat < (xj - xi) * (lng - yi) / (yj - yi) + xi)) inside = !inside;
         }
         return inside;
     }
 
-    // Generate dense ocean grid around Taiwan
+    // Generate grid
     for (let lat = 21.2; lat <= 26.0; lat += 0.35) {
         for (let lng = 119.0; lng <= 123.0; lng += 0.35) {
-            
-            // Subtle organic jitter so it doesn't look like a robotic grid
             const jLat = lat + (Math.random() * 0.1 - 0.05);
             const jLng = lng + (Math.random() * 0.1 - 0.05);
 
-            // Land Mask: Skip if point lands on Taiwan island
             if (isPointInPolygon(jLat, jLng, taiwanPolygon)) continue;
             
-            // Calculate distance to center (Taiwan) to increase intensity near the coast
             const distLat = Math.abs(23.7 - jLat);
             const distLng = Math.abs(121.0 - jLng);
             const dist = Math.sqrt(distLat*distLat + distLng*distLng);
@@ -67,42 +80,42 @@ function generateServerlessData() {
             
             const wave_height = 0.5 + (Math.random() * 4.0 * intensity) + (intensity * 6.0);
             const wind_speed = 5.0 + (Math.random() * 15.0 * intensity) + (intensity * 20.0);
-            const weight = Math.min(wave_height / 12.0, 1.0);
             
-            // Kuroshio Current Vector Field (Flows continuously North/Northeast)
-            const wind_angle = 20 + Math.random() * 40; // 20 to 60 degrees (Northeast)
+            // Map weight (0-1) to Danger Score (0-10)
+            const weight = Math.min(wave_height / 12.0, 1.0);
+            const danger_score = weight * 10.0;
+            
+            // Kuroshio Current flows North/Northeast (20 to 60 degrees)
+            const wind_angle = 20 + Math.random() * 40; 
             
             let directionLabel = "NE";
             if (wind_angle < 30) directionLabel = "NNE";
             if (wind_angle > 50) directionLabel = "ENE";
             
-            points.push({ lat: jLat, lng: jLng, wave_height, wind_speed, weight, direction: directionLabel, angle: wind_angle });
+            points.push({ lat: jLat, lng: jLng, wave_height, wind_speed, danger_score, direction: directionLabel, angle: wind_angle });
         }
     }
-    
     return { points };
 }
 
-// Render Data to Leaflet
 const data = generateServerlessData();
 
 data.points.forEach(d => {
-    // Porthole size based on wave intensity
     const size = 35 + (d.wave_height * 3); 
-    const color = spriteColorInterpolator(d.weight);
+    const color = getDangerColor(d.danger_score, 1.0);
+    const borderColor = getDangerColor(d.danger_score, 0.8);
     
-    // CSS flow animation speed based strictly on wind speed (faster wind = faster scroll)
     const flowSpeed = Math.max(0.3, 2.5 - (d.wind_speed * 0.05));
     
-    // Rotate the entire porthole so the water flows towards the wind angle.
-    // The SVG paths flow right (+X). 0 degrees = East. We rotate by (angle - 90) to align with North/Northeast.
+    // Rotate <div> so SVG flows toward wind angle
     const rotation = d.angle - 90;
     
-    // Generates a literal circular porthole filled with seamlessly flowing stacked sine waves
+    // Using 100% reliable <animateTransform> instead of CSS @keyframes to guarantee SVG flow animation on all browsers
     const svgHtml = `
-        <div style="width: ${size}px; height: ${size}px; border-radius: 50%; overflow: hidden; transform: rotate(${rotation}deg); background: rgba(0,0,0,0.02); border: 2px solid ${colorInterpolator(d.weight)}; box-shadow: 0 0 8px ${colorInterpolator(d.weight)};">
+        <div style="width: ${size}px; height: ${size}px; border-radius: 50%; overflow: hidden; transform: rotate(${rotation}deg); background: rgba(0,0,0,0.02); border: 2px solid ${borderColor}; box-shadow: 0 0 8px ${borderColor};">
             <svg width="100%" height="100%" viewBox="0 0 100 100">
-                <g stroke="${color}" stroke-width="8" fill="none" style="animation: flow ${flowSpeed}s linear infinite;">
+                <g stroke="${color}" stroke-width="8" fill="none">
+                    <animateTransform attributeName="transform" type="translate" from="0,0" to="100,0" dur="${flowSpeed}s" repeatCount="indefinite" />
                     <path d="M-100 30 Q -75 10, -50 30 T 0 30 T 50 30 T 100 30 T 150 30 T 200 30" />
                     <path d="M-100 50 Q -75 30, -50 50 T 0 50 T 50 50 T 100 50 T 150 50 T 200 50" />
                     <path d="M-100 70 Q -75 50, -50 70 T 0 70 T 50 70 T 100 70 T 150 70 T 200 70" />
@@ -111,31 +124,24 @@ data.points.forEach(d => {
         </div>
     `;
 
-    // Create a Custom Leaflet Icon
     const waveIcon = L.divIcon({
         html: svgHtml,
         className: 'custom-wave-icon',
         iconSize: [size, size],
-        iconAnchor: [size/2, size/2], // Center perfectly over the lat/lng
+        iconAnchor: [size/2, size/2],
         popupAnchor: [0, -size/2]
     });
-
-    const risk = Math.min(d.weight, 1.0);
-    let riskLabel = "Safe (Calm Waters)";
-    if (risk > 0.5) riskLabel = "Caution (Heavy Weather)";
-    if (risk > 0.8) riskLabel = "Danger (Rogue Waves)";
 
     const popupHtml = `
         <div style="font-size: 13px;">
             <b style="color: #0ff;">Maritime Sector Analysis</b><br/>
-            Status: <span style="color:${colorInterpolator(risk)}; font-weight: bold;">${riskLabel}</span><br/><br/>
+            Danger Score: <span style="color:${color}; font-weight: bold; font-size: 16px;">${d.danger_score.toFixed(1)} / 10</span><br/><br/>
             📍 Coord: <b>Lat ${d.lat.toFixed(4)}, Lng ${d.lng.toFixed(4)}</b><br/>
             🌊 Wave Height: <b>${d.wave_height.toFixed(1)} m</b><br/>
             💨 Wind Speed: <b>${d.wind_speed.toFixed(1)} m/s (${d.direction})</b>
         </div>
     `;
 
-    // Add marker to map
     L.marker([d.lat, d.lng], { icon: waveIcon })
         .addTo(map)
         .bindPopup(popupHtml);
