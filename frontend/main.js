@@ -39,6 +39,7 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
 
 const markers = [];
 const baseEpicenters = [];
+let trueCoastlineRing = []; // Global access for deep sea physics deflections
 
 // Inverse Distance Weighting (IDW) Spatial Simulation AI
 function simulateMarineConditionsIDW(lat, lng) {
@@ -82,28 +83,27 @@ async function renderTrueCoastline() {
         const res = await fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries/TWN.geo.json');
         const geojson = await res.json();
         
-        let mainRing = [];
         const geom = geojson.features[0].geometry;
         
         if (geom.type === 'Polygon') {
-            mainRing = geom.coordinates[0];
+            trueCoastlineRing = geom.coordinates[0];
         } else if (geom.type === 'MultiPolygon') {
             let maxPoints = 0;
             geom.coordinates.forEach(polygon => {
                 const ring = polygon[0];
                 if (ring.length > maxPoints) {
                     maxPoints = ring.length;
-                    mainRing = ring;
+                    trueCoastlineRing = ring;
                 }
             });
         }
         
         const maxAllowed = 300;
-        const step = Math.max(1, Math.ceil(mainRing.length / maxAllowed));
+        const step = Math.max(1, Math.ceil(trueCoastlineRing.length / maxAllowed));
         
         const sampledRing = [];
-        for (let i = 0; i < mainRing.length; i += step) {
-            sampledRing.push(mainRing[i]);
+        for (let i = 0; i < trueCoastlineRing.length; i += step) {
+            sampledRing.push(trueCoastlineRing[i]);
         }
         
         sampledRing.forEach((coord, i) => {
@@ -193,7 +193,7 @@ async function renderTrueCoastline() {
     }
 }
 
-// Deep Ocean Matrix AI (Open-Meteo)
+// Deep Ocean Matrix AI (Open-Meteo) with Coastal Deflection Physics
 async function renderDeepOceanGrid() {
     const lats = [];
     const lngs = [];
@@ -201,9 +201,20 @@ async function renderDeepOceanGrid() {
     // Spawn hex grid over deep ocean
     for (let lat = 21.0; lat <= 26.0; lat += 0.8) {
         for (let lng = 119.0; lng <= 123.0; lng += 0.8) {
-            // Cut out the center (Taiwan landmass)
-            const distToCenterSq = Math.pow(lat - 23.7, 2) + Math.pow(lng - 121.0, 2);
-            if (distToCenterSq > 1.2) { // Deep offshore only
+            
+            // Check true distance to land using the geojson polygon
+            let minDistSq = Infinity;
+            if (trueCoastlineRing.length > 0) {
+                trueCoastlineRing.forEach(coord => {
+                    const distSq = Math.pow(coord[1] - lat, 2) + Math.pow(coord[0] - lng, 2);
+                    if (distSq < minDistSq) minDistSq = distSq;
+                });
+            } else {
+                minDistSq = Math.pow(lat - 23.7, 2) + Math.pow(lng - 121.0, 2);
+            }
+
+            // Exclude nodes that are physically inside or too close to land (~30km)
+            if (minDistSq > 0.1) {
                 lats.push(lat.toFixed(2));
                 lngs.push(lng.toFixed(2));
             }
@@ -237,14 +248,73 @@ async function renderDeepOceanGrid() {
             const lat = parseFloat(batchLats[i]);
             const lng = parseFloat(batchLngs[i]);
             
-            // Render massive flowing deep sea waves!
-            // SVG Y-axis points down. wave_direction is meteorlogical.
-            const rotation = wd; 
+            let rotation = wd; 
+            let physicsStatus = "Free Flowing";
             
-            // Make them massive but transparent to show deep ocean swells
+            // ==========================================
+            // PHYSICS ENGINE: Coastal Deflection System
+            // ==========================================
+            let closestCoastPoint = null;
+            let minDistSq = Infinity;
+            let closestIndex = -1;
+            
+            trueCoastlineRing.forEach((coord, idx) => {
+                const dist = Math.pow(coord[1] - lat, 2) + Math.pow(coord[0] - lng, 2);
+                if (dist < minDistSq) {
+                    minDistSq = dist;
+                    closestCoastPoint = coord;
+                    closestIndex = idx;
+                }
+            });
+            
+            // If the current is near the coast (within ~60km)
+            if (minDistSq < 0.3) {
+                const prev = trueCoastlineRing[closestIndex === 0 ? trueCoastlineRing.length - 1 : closestIndex - 1];
+                const next = trueCoastlineRing[(closestIndex + 1) % trueCoastlineRing.length];
+                
+                const dy = next[1] - prev[1];
+                const dx = next[0] - prev[0];
+                const tangentRad = Math.atan2(dy, dx);
+                let normalRad = tangentRad + (Math.PI / 2);
+                
+                // Ensure normal points inland
+                const centerDy = 23.7 - closestCoastPoint[1];
+                const centerDx = 121.0 - closestCoastPoint[0];
+                const centerAngleRad = Math.atan2(centerDy, centerDx);
+                if (Math.cos(normalRad)*Math.cos(centerAngleRad) + Math.sin(normalRad)*Math.sin(centerAngleRad) < 0) {
+                    normalRad -= Math.PI;
+                }
+                
+                // Calculate Ocean Flow vector in standard math radians
+                const mathFlowRad = (90 - (wd + 180)) * Math.PI / 180;
+                
+                // Dot product determines if it is hitting the landmass (>0 means hitting)
+                const dotProduct = Math.cos(mathFlowRad)*Math.cos(normalRad) + Math.sin(mathFlowRad)*Math.sin(normalRad);
+                
+                if (dotProduct > 0.15) {
+                    physicsStatus = "Deflected by Coastline";
+                    // It's crashing into Taiwan! Deflect it to run parallel to the beach.
+                    const dotT1 = Math.cos(mathFlowRad)*Math.cos(tangentRad) + Math.sin(mathFlowRad)*Math.sin(tangentRad);
+                    const dotT2 = Math.cos(mathFlowRad)*Math.cos(tangentRad + Math.PI) + Math.sin(mathFlowRad)*Math.sin(tangentRad + Math.PI);
+                    
+                    const finalMathFlow = dotT1 > dotT2 ? tangentRad : (tangentRad + Math.PI);
+                    
+                    // Translate math flow back to SVG rotation
+                    rotation = -(finalMathFlow * 180 / Math.PI) - 90;
+                }
+            }
+            
+            // Increase visibility significantly so currents are clearly seen
             const baseWidth = 40 + (wh * 15);
             const baseHeight = 40 + (wh * 15);
-            const color = getDangerColor(Math.min(10, wh * 3.0), 0.35); // 35% ghost opacity
+            
+            // 85% opacity, and force a bright color if it's deflected
+            let color = getDangerColor(Math.min(10, wh * 3.0), 0.85); 
+            if (physicsStatus === "Deflected by Coastline") {
+                color = getDangerColor(8.0, 0.95); // Force bright orange for deflected crashing waves
+            }
+
+            // Thicker stroke for better visibility
             const flowSpeed = Math.max(0.6, 5.0 - (cv * 2));
             
             const currentScale = Math.pow(2, map.getZoom() - 7);
@@ -254,7 +324,7 @@ async function renderDeepOceanGrid() {
             const svgHtml = `
                 <div style="width: 100%; height: 100%; transform: rotate(${rotation}deg); display: flex; align-items: center; justify-content: center;">
                     <svg width="100%" height="100%" viewBox="-50 -50 100 100">
-                        <g stroke="${color}" stroke-width="4" stroke-linecap="round" fill="none">
+                        <g stroke="${color}" stroke-width="8" stroke-linecap="round" fill="none">
                             <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
                                 <animateTransform attributeName="transform" type="translate" from="0, -30" to="0, 30" dur="${flowSpeed}s" repeatCount="indefinite" />
                                 <animate attributeName="opacity" values="0; 1; 1; 0" keyTimes="0; 0.2; 0.8; 1" dur="${flowSpeed}s" repeatCount="indefinite" />
@@ -276,6 +346,7 @@ async function renderDeepOceanGrid() {
                 .bindPopup(`
                     <div style="font-size: 13px;">
                         <b style="color:#0ff">Copernicus Satellite Node</b><br/>
+                        Physics: <b style="color:#ffaa00">${physicsStatus}</b><br/>
                         🌊 Deep Sea Wave Height: <b>${wh.toFixed(1)} m</b><br/>
                         💨 Ocean Current Velocity: <b>${cv.toFixed(1)} km/h</b><br/>
                         🧭 Flow Direction: <b>${wd.toFixed(0)}°</b>
