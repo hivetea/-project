@@ -3,20 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A3 Maritime Globe</title>
+    <title>A3 Maritime Map</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     
-    <!-- Globe.gl dependency -->
-    <script src="//unpkg.com/globe.gl"></script>
+    <!-- Leaflet dependency (Replaces globe.gl) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <style>
+        /* Map Override */
+        #globeViz { width: 100vw; height: 100vh; background: #050510; }
+        
+        /* Leaflet popup dark mode override */
+        .leaflet-popup-content-wrapper {
+            background: rgba(10, 15, 25, 0.95);
+            border: 1px solid rgba(0, 255, 255, 0.2);
+            color: #a0c0d0;
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+        }
+        .leaflet-popup-tip {
+            background: rgba(10, 15, 25, 0.95);
+        }
+        
+        /* Reset Leaflet marker default styles for custom SVGs */
+        .leaflet-div-icon {
+            background: transparent !important;
+            border: none !important;
+        }
+    </style>
 </head>
 <body>
+    <!-- The Map Container -->
     <div id="globeViz"></div>
     
     <!-- UI Overlay -->
     <div class="overlay">
         <h1>Maritime Safety Intel</h1>
-        <p>Live CWA Oceanic Gateway</p>
+        <p>Live CWA Coastal Gateway</p>
         
         <div class="legend">
             <div class="legend-item"><div class="color-box safe"></div> Calm Waters (Low Risk)</div>
@@ -25,6 +49,6 @@
         </div>
     </div>
 
-    <script src="main.js?v=9"></script>
+    <script src="main.js?v=10"></script>
 </body>
 </html>
