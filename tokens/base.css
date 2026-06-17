@@ -1,0 +1,92 @@
+/* ============================================================
+   A3 MARITIME INTELLIGENCE — BASE RESET & PRIMITIVES
+   Minimal element defaults + the signature tactical-grid
+   background motif (lifted from the brief's geospatial spec).
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-normal);
+  color: var(--text-secondary);
+  background-color: var(--surface-base);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+}
+
+/* ---- Tactical eyebrow label ---- */
+.a3-eyebrow {
+  font-size: var(--type-eyebrow-size);
+  font-weight: var(--type-eyebrow-weight);
+  letter-spacing: var(--type-eyebrow-track);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ---- Mono telemetry readout ---- */
+.a3-readout {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+}
+
+/* ============================================================
+   SIGNATURE BACKGROUND: dark geospatial grid
+   Use on the app shell / map placeholder.
+   ============================================================ */
+.a3-grid-bg {
+  background-color: var(--surface-base);
+  background-image:
+    linear-gradient(to right, rgba(79, 79, 79, 0.18) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(79, 79, 79, 0.18) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Denser grid + radial vignette for the map canvas */
+.a3-grid-bg--map {
+  background-color: #050510; /* production map void color */
+  background-image:
+    radial-gradient(circle at 50% 40%, rgba(20, 184, 166, 0.06), transparent 60%),
+    linear-gradient(to right, rgba(94, 234, 212, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(94, 234, 212, 0.07) 1px, transparent 1px);
+  background-size: auto, 32px 32px, 32px 32px;
+}
+
+/* ---- Glass panel utility ---- */
+.a3-glass {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-glass);
+}
+
+/* ---- Custom scrollbar (dark) ---- */
+.a3-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.a3-scroll::-webkit-scrollbar-track { background: transparent; }
+.a3-scroll::-webkit-scrollbar-thumb {
+  background: var(--slate-700);
+  border-radius: var(--radius-full);
+}
+.a3-scroll::-webkit-scrollbar-thumb:hover { background: var(--slate-600); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
