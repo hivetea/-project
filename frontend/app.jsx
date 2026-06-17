@@ -269,10 +269,10 @@ function drawUnifiedCoastline(map) {
         const html = `
             <div style="width:100%; height:100%; transform:rotate(${rot}deg); display:flex; align-items:center; justify-content:center;">
                 <svg width="100%" height="100%" viewBox="-50 -50 100 100">
-                    <g stroke="${color}" stroke-width="5" stroke-linecap="round" fill="none">
+                    <g stroke="${color}" stroke-width="2.5" stroke-linecap="round" fill="none">
                         <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
                             <animateTransform attributeName="transform" type="translate" from="0,-30" to="0,30" dur="${flow}s" repeatCount="indefinite" />
-                            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.2;0.8;1" dur="${flow}s" repeatCount="indefinite" />
+                            <animate attributeName="opacity" values="0;0.55;0.55;0" keyTimes="0;0.2;0.8;1" dur="${flow}s" repeatCount="indefinite" />
                         </path>
                     </g>
                 </svg>
@@ -317,10 +317,10 @@ function drawDeepOceanGrid(map) {
         const html = `
             <div style="width:100%; height:100%; transform:rotate(${rot}deg); display:flex; align-items:center; justify-content:center;">
                 <svg width="100%" height="100%" viewBox="-50 -50 100 100">
-                    <g stroke="${color}" stroke-width="3" stroke-linecap="round" fill="none">
+                    <g stroke="${color}" stroke-width="1.5" stroke-linecap="round" fill="none">
                         <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
                             <animateTransform attributeName="transform" type="translate" from="0,-30" to="0,30" dur="${flow}s" repeatCount="indefinite" />
-                            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.2;0.8;1" dur="${flow}s" repeatCount="indefinite" />
+                            <animate attributeName="opacity" values="0;0.45;0.45;0" keyTimes="0;0.2;0.8;1" dur="${flow}s" repeatCount="indefinite" />
                         </path>
                     </g>
                 </svg>
