@@ -150,183 +150,383 @@ function Header({ clock, compact = false }) {
  * Clicking / tapping a sector node selects it.
  * mobile=true  → larger tap targets (44px+), simplified legend
  */
+
+/* ── PHYSICS ENGINE INJECTED FROM MAIN.JS ── */
+window.physicsEngineBooted = false;
+window.baseEpicenters = [];
+window.trueCoastlineRing = [];
+window.globalDeepSeaNodes = [];
+window.physicsMarkers = [];
+
+function isPointInPolygon(point, vs) {
+    let x = point[0], y = point[1];
+    let inside = false;
+    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+        let xi = vs[i][0], yi = vs[i][1];
+        let xj = vs[j][0], yj = vs[j][1];
+        let intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
+function simulateMarineConditionsIDW(lat, lng) {
+    let sumWeight = 0; let sumWaveHeight = 0; let sumWindSpeed = 0; let sumDanger = 0;
+    const p = 2;
+    for (let i = 0; i < window.baseEpicenters.length; i++) {
+        const ep = window.baseEpicenters[i];
+        const distSq = Math.pow(ep.lat - lat, 2) + Math.pow(ep.lng - lng, 2);
+        if (distSq < 0.0000001) return { wave_height: ep.wave_height, wind_speed: ep.wind_speed, danger_score: ep.danger_score };
+        const dist = Math.sqrt(distSq); const w = 1.0 / Math.pow(dist, p);
+        sumWeight += w; sumWaveHeight += ep.wave_height * w; sumWindSpeed += ep.wind_speed * w; sumDanger += ep.danger_score * w;
+    }
+    if (sumWeight === 0) return { wave_height: 0, wind_speed: 0, danger_score: 0 };
+    return { wave_height: sumWaveHeight / sumWeight, wind_speed: sumWindSpeed / sumWeight, danger_score: sumDanger / sumWeight };
+}
+
+async function loadCoastlinePolygon() {
+    try {
+        const res = await fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries/TWN.geo.json');
+        const geojson = await res.json();
+        const geom = geojson.features[0].geometry;
+        if (geom.type === 'Polygon') window.trueCoastlineRing = geom.coordinates[0];
+        else if (geom.type === 'MultiPolygon') {
+            let maxP = 0;
+            geom.coordinates.forEach(p => { if (p[0].length > maxP) { maxP = p[0].length; window.trueCoastlineRing = p[0]; } });
+        }
+    } catch(err) { console.error("Coastline load failed", err); }
+}
+
+async function fetchDeepOceanData() {
+    const lats = []; const lngs = [];
+    for (let lat = 21.0; lat <= 26.0; lat += 0.15) {
+        for (let lng = 119.0; lng <= 123.0; lng += 0.15) {
+            let minDistSq = Infinity;
+            if (window.trueCoastlineRing.length > 0) {
+                window.trueCoastlineRing.forEach(c => {
+                    const d = Math.pow(c[1]-lat, 2) + Math.pow(c[0]-lng, 2);
+                    if (d < minDistSq) minDistSq = d;
+                });
+            } else { minDistSq = Math.pow(lat-23.7, 2)+Math.pow(lng-121.0, 2); }
+            const hexOff = (Math.round(lat/0.15)%2 === 0)?0:0.075;
+            const finalLng = lng+hexOff;
+            const inside = window.trueCoastlineRing.length > 0 && isPointInPolygon([finalLng,lat], window.trueCoastlineRing);
+            if (!inside && minDistSq > 0.005) { lats.push(lat.toFixed(3)); lngs.push(finalLng.toFixed(3)); }
+        }
+    }
+    if (lats.length===0) return;
+    const chunkSize=90; const promises=[];
+    for(let i=0; i<lats.length; i+=chunkSize){
+        const bLat=lats.slice(i,i+chunkSize); const bLng=lngs.slice(i,i+chunkSize);
+        const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${bLat.join(',')}&longitude=${bLng.join(',')}&current=wave_height,wave_direction,ocean_current_velocity,ocean_current_direction`;
+        promises.push(fetch(url).then(r=>r.json()).then(data=>({data, bLat, bLng})));
+    }
+    try {
+        const responses = await Promise.all(promises);
+        responses.forEach(({data, bLat, bLng}) => {
+            const arr = Array.isArray(data)?data:[data];
+            arr.forEach((o,i)=>{
+                if(!o.current)return;
+                window.globalDeepSeaNodes.push({ lat:parseFloat(bLat[i]), lng:parseFloat(bLng[i]), wh:o.current.wave_height||1.0, wd:o.current.wave_direction||0, cv:o.current.ocean_current_velocity||0 });
+            });
+        });
+    } catch(err) { console.error("OM Fetch failed", err); }
+}
+
+function drawUnifiedCoastline(map) {
+    if(window.trueCoastlineRing.length===0)return;
+    const step=Math.max(1,Math.ceil(window.trueCoastlineRing.length/300));
+    const sampled=[];
+    for(let i=0; i<window.trueCoastlineRing.length; i+=step) sampled.push(window.trueCoastlineRing[i]);
+    sampled.forEach((coord, i)=>{
+        const lng=coord[0]; const lat=coord[1];
+        const prev = sampled[i===0?sampled.length-1:i-1];
+        const next = sampled[(i+1)%sampled.length];
+        const dy=next[1]-prev[1]; const dx=next[0]-prev[0];
+        let normalRad = Math.atan2(dy, dx) + (Math.PI/2);
+        const cDy=23.7-lat; const cDx=121.0-lng; const cRad=Math.atan2(cDy,cDx);
+        if(Math.cos(normalRad)*Math.cos(cRad)+Math.sin(normalRad)*Math.sin(cRad)<0) normalRad-=Math.PI;
+        
+        const fLat = lat - Math.sin(normalRad)*0.005;
+        const fLng = lng - Math.cos(normalRad)*0.005;
+        
+        const sim = simulateMarineConditionsIDW(fLat, fLng);
+        let fWh = sim.wave_height; let fDs = sim.danger_score;
+        let cSwell=0; let hImpact=0;
+        window.globalDeepSeaNodes.forEach(node=>{
+            const dSq = Math.pow(node.lat-fLat,2)+Math.pow(node.lng-fLng,2);
+            if(dSq<0.15) {
+                const mFr = (90-(node.wd+180))*Math.PI/180;
+                const dp = Math.cos(mFr)*Math.cos(normalRad) + Math.sin(mFr)*Math.sin(normalRad);
+                if(dp>0.4){
+                    const impact = node.wh*dp;
+                    if(impact>hImpact){ hImpact=impact; cSwell=impact; }
+                }
+            }
+        });
+        
+        let st = `狀態: <b style="color: #0ff;">局部風浪</b>`;
+        if(cSwell>0){ fWh+=(cSwell*0.8); fDs+=(cSwell*4.0); st=`狀態: <b style="color: #ff3300;">⚠️ 偵測到外海湧浪碰撞</b>`; }
+        const rot = -(normalRad*180/Math.PI)-90;
+        const bW=20+(fWh*4.0); const bH=20+(fWh*4.0);
+        const color = window.dangerColor(fDs);
+        const flow = Math.max(0.6, 2.5-(sim.wind_speed*0.05));
+        
+        const html = `
+            <div style="width:100%; height:100%; transform:rotate(${rot}deg); display:flex; align-items:center; justify-content:center;">
+                <svg width="100%" height="100%" viewBox="-50 -50 100 100">
+                    <g stroke="${color}" stroke-width="15" stroke-linecap="round" fill="none">
+                        <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
+                            <animateTransform attributeName="transform" type="translate" from="0,-30" to="0,30" dur="${flow}s" repeatCount="indefinite" />
+                            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.2;0.8;1" dur="${flow}s" repeatCount="indefinite" />
+                        </path>
+                    </g>
+                </svg>
+            </div>
+        `;
+        const ic = L.divIcon({ html, className:'custom-wave-icon', iconSize:[bW,bH], iconAnchor:[bW/2,bH/2] });
+        const m = L.marker([fLat,fLng], {icon:ic}).addTo(map);
+        window.physicsMarkers.push({ layer:m, bW, bH });
+    });
+}
+
+function drawDeepOceanGrid(map) {
+    window.globalDeepSeaNodes.forEach(node => {
+        let rot=node.wd; let pSt="自由流動";
+        let cDist=Infinity; let cIdx=-1; let cPt=null;
+        window.trueCoastlineRing.forEach((c,i)=>{
+            const d=Math.pow(c[1]-node.lat,2)+Math.pow(c[0]-node.lng,2);
+            if(d<cDist){ cDist=d; cPt=c; cIdx=i; }
+        });
+        if(cDist<0.3){
+            const prev=window.trueCoastlineRing[cIdx===0?window.trueCoastlineRing.length-1:cIdx-1];
+            const next=window.trueCoastlineRing[(cIdx+1)%window.trueCoastlineRing.length];
+            const tR=Math.atan2(next[1]-prev[1], next[0]-prev[0]);
+            let nR=tR+(Math.PI/2);
+            const cR=Math.atan2(23.7-cPt[1], 121.0-cPt[0]);
+            if(Math.cos(nR)*Math.cos(cR)+Math.sin(nR)*Math.sin(cR)<0) nR-=Math.PI;
+            const mFr=(90-(node.wd+180))*Math.PI/180;
+            const dp=Math.cos(mFr)*Math.cos(nR)+Math.sin(mFr)*Math.sin(nR);
+            if(dp>0.15){
+                pSt="受海岸線偏折";
+                const d1=Math.cos(mFr)*Math.cos(tR)+Math.sin(mFr)*Math.sin(tR);
+                const d2=Math.cos(mFr)*Math.cos(tR+Math.PI)+Math.sin(mFr)*Math.sin(tR+Math.PI);
+                const fF = d1>d2?tR:(tR+Math.PI);
+                rot=-(fF*180/Math.PI)-90;
+            }
+        }
+        const bW=15+(node.wh*3.0); const bH=15+(node.wh*3.0);
+        let color = window.dangerColor(node.wh*3.0);
+        if(pSt!=="自由流動") color = window.dangerColor(node.wh*3.0+2.0);
+        const flow=Math.max(0.6, 5.0-(node.cv*2));
+        
+        const html = `
+            <div style="width:100%; height:100%; transform:rotate(${rot}deg); display:flex; align-items:center; justify-content:center;">
+                <svg width="100%" height="100%" viewBox="-50 -50 100 100">
+                    <g stroke="${color}" stroke-width="8" stroke-linecap="round" fill="none">
+                        <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
+                            <animateTransform attributeName="transform" type="translate" from="0,-30" to="0,30" dur="${flow}s" repeatCount="indefinite" />
+                            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.2;0.8;1" dur="${flow}s" repeatCount="indefinite" />
+                        </path>
+                    </g>
+                </svg>
+            </div>
+        `;
+        const ic = L.divIcon({ html, className:'custom-wave-icon', iconSize:[bW,bH], iconAnchor:[bW/2,bH/2] });
+        const m = L.marker([node.lat,node.lng], {icon:ic}).addTo(map);
+        window.physicsMarkers.push({ layer:m, bW, bH });
+    });
+}
+
+window.bootEngine = async function(map) {
+    if(window.physicsEngineBooted) return;
+    window.physicsEngineBooted = true;
+    try {
+        const res = await fetch('coastal_stations.json');
+        const raw = await res.json();
+        raw.forEach(s=>{
+            try {
+                const c = s.GeoInfo.Coordinates.find(x=>x.CoordinateName==='WGS84');
+                const lat=parseFloat(c.StationLatitude); const lng=parseFloat(c.StationLongitude);
+                let w = parseFloat(s.WeatherElement.WindSpeed); if(isNaN(w)||w<0)w=3.0;
+                let wh = 0.22*(Math.pow(w,2)/9.81); if(wh<0.2)wh=0.2;
+                const d = Math.min(10.0, wh*3.5);
+                window.baseEpicenters.push({lat,lng,wind_speed:w, wave_height:wh, danger_score:d});
+            } catch(e){}
+        });
+        await loadCoastlinePolygon();
+        await fetchDeepOceanData();
+        drawUnifiedCoastline(map);
+        drawDeepOceanGrid(map);
+        
+        // Setup strict scaling
+        map.on('zoom', () => {
+            const scale = Math.pow(2, map.getZoom() - 7);
+            window.physicsMarkers.forEach(m => {
+                const icon = m.layer._icon;
+                if(icon){
+                    const nw = m.bW*scale; const nh = m.bH*scale;
+                    icon.style.width=nw+'px'; icon.style.height=nh+'px';
+                    icon.style.marginLeft=-(nw/2)+'px'; icon.style.marginTop=-(nh/2)+'px';
+                }
+            });
+        });
+    } catch(e){ console.error("Boot failed", e); }
+};
+/* ── END PHYSICS ENGINE ── */
+
+
 function GeospatialCanvas({ sectors, selectedId, onSelect, scanning, mobile = false }) {
   const { Badge } = window.A3MaritimeIntelligenceDesignSystem_4ef093;
+  const containerRef = React.useRef(null);
+  const mapRef = React.useRef(null);
+  const markersRef = React.useRef({});
+  const ringsRef = React.useRef(null);
 
-  /* dangerColor — inline (camelCase not on DS namespace) */
-  function dangerColor(score) {
-    const stops = [
-      { v: 0.0,  c: [20,  100, 255] },
-      { v: 2.5,  c: [0,   255, 255] },
-      { v: 5.0,  c: [255, 255,   0] },
-      { v: 7.5,  c: [255, 140,   0] },
-      { v: 10.0, c: [255,  30,  30] },
-    ];
-    const s = Math.max(0, Math.min(10, score));
-    let lo = stops[0], hi = stops[stops.length - 1];
-    for (let i = 0; i < stops.length - 1; i++) {
-      if (s >= stops[i].v && s <= stops[i + 1].v) { lo = stops[i]; hi = stops[i + 1]; break; }
+  React.useEffect(() => {
+    if (!containerRef.current || mapRef.current || !window.L) return;
+    
+    const map = L.map(containerRef.current, {
+      center: [23.7, 121.0], zoom: 7, zoomControl: false, attributionControl: false
+    });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 20 }).addTo(map);
+    mapRef.current = map;
+    
+    window.bootEngine(map);
+    
+    return () => { map.remove(); mapRef.current = null; };
+  }, []);
+
+  React.useEffect(() => {
+    if (!mapRef.current || !window.L) return;
+    const map = mapRef.current;
+    
+    sectors.forEach(s => {
+       const mLat = s.coord.match(/([\d.]+)°N/);
+       const mLng = s.coord.match(/([\d.]+)°E/);
+       if(!mLat || !mLng) return;
+       const lat = parseFloat(mLat[1]); const lng = parseFloat(mLng[1]);
+       
+       const isSel = s.id === selectedId;
+       const DOT = mobile ? (isSel ? 22 : 18) : (isSel ? 18 : 13);
+       const color = window.dangerColor(s.danger);
+       
+       const html = `
+         <div style="position:relative; width:${DOT}px; height:${DOT}px; display:flex; align-items:center; justify-content:center;">
+            <div style="
+              width:${DOT}px; height:${DOT}px; border-radius:50%;
+              background:${color}; box-shadow:0 0 ${isSel?20:10}px ${color};
+              border: ${isSel ? '2.5px solid #020617' : '2px solid rgba(2,6,23,0.55)'};
+              ${s.danger >= 7.5 ? 'animation: a3-breathe 1.8s ease-out infinite;' : ''}
+            "></div>
+            <div style="
+              position:absolute; top:100%; margin-top:4px;
+              font-family:monospace; font-size:${mobile?11:10}px;
+              white-space:nowrap; padding:2px 6px; border-radius:4px;
+              background:rgba(2,6,23,0.75); color:${isSel?'#fff':'#94a3b8'};
+              border:1px solid ${isSel?'rgba(34,211,238,0.5)':'transparent'};
+              backdrop-filter:blur(4px); pointer-events:none;
+            ">${s.name}</div>
+         </div>
+       `;
+       
+       if (markersRef.current[s.id]) {
+          const m = markersRef.current[s.id];
+          m.setIcon(L.divIcon({ className: '', html, iconSize: [DOT, DOT], iconAnchor: [DOT/2, DOT/2] }));
+          m.off('click');
+          m.on('click', () => onSelect(s.id));
+       } else {
+          const m = L.marker([lat, lng], {
+            icon: L.divIcon({ className: '', html, iconSize: [DOT, DOT], iconAnchor: [DOT/2, DOT/2] }),
+            zIndexOffset: 1000
+          }).addTo(map);
+          m.on('click', () => onSelect(s.id));
+          markersRef.current[s.id] = m;
+       }
+    });
+  }, [sectors, selectedId, mobile]);
+
+  // Radar Rings
+  React.useEffect(() => {
+    if(!mapRef.current || !window.L) return;
+    const map = mapRef.current;
+    if(scanning) {
+       if(!ringsRef.current) {
+         const html = `
+           <div style="position:relative; width:0; height:0;">
+             ${[0,1,2].map(i => `<span style="
+               position:absolute; left:50%; top:50%; width:220px; height:220px; margin-left:-110px; margin-top:-110px;
+               border-radius:50%; border:1.5px solid rgba(34,211,238,0.45);
+               animation: a3-radar 3.6s ease-out ${i * 1.2}s infinite;
+             "></span>`).join('')}
+           </div>
+         `;
+         const m = L.marker([23.7, 121.0], {
+           icon: L.divIcon({ className:'', html, iconSize:[0,0] }),
+           interactive: false,
+           zIndexOffset: -100
+         }).addTo(map);
+         ringsRef.current = m;
+       }
+    } else {
+       if(ringsRef.current) { ringsRef.current.remove(); ringsRef.current = null; }
     }
-    const t = hi.v === lo.v ? 0 : (s - lo.v) / (hi.v - lo.v);
-    const ch = (k) => Math.round(lo.c[k] + (hi.c[k] - lo.c[k]) * t);
-    return `rgb(${ch(0)},${ch(1)},${ch(2)})`;
-  }
+  }, [scanning]);
 
   return (
-    <div
-      className="a3-grid-bg--map a3-scroll"
-      style={{
-        position: 'relative', flex: 1, minWidth: 0,
-        borderRadius: mobile ? 0 : 'var(--radius-lg)',
-        border: mobile ? 'none' : '1px solid var(--border-subtle)',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Radar scan rings (centred at Taiwan) */}
-      <div style={{ position: 'absolute', left: '46%', top: '40%', width: 0, height: 0 }}>
-        {[0, 1, 2].map((i) => (
-          <span key={i} style={{
-            position: 'absolute', left: '50%', top: '50%',
-            width: 220, height: 220,
-            marginLeft: -110, marginTop: -110,
-            borderRadius: '50%',
-            border: '1.5px solid rgba(34,211,238,0.45)',
-            animation: `a3-radar 3.6s var(--ease-out) ${i * 1.2}s infinite`,
-          }} />
-        ))}
+    <div style={{ position: 'relative', flex: 1, minWidth: 0, borderRadius: mobile ? 0 : 'var(--radius-lg)', overflow: 'hidden', border: mobile ? 'none' : '1px solid var(--border-subtle)' }}>
+      <div ref={containerRef} style={{ width: '100%', height: '100%', background: '#020617' }} />
+      
+      {/* Live scan badge */}
+      <div style={{ position: 'absolute', left: 14, top: 14, zIndex: 400 }}>
+        <Badge tone={scanning ? 'cyan' : 'accent'} dot uppercase>
+          {scanning ? '掃描區段中…' : '即時 · 115 觀測站'}
+        </Badge>
       </div>
 
-      {/* Sector nodes */}
-      {sectors.map((s) => {
-        const color = dangerColor(s.danger);
-        const isSel = s.id === selectedId;
-        const DOT = mobile ? (isSel ? 22 : 18) : (isSel ? 18 : 13);
-        const HIT = mobile ? 52 : 36; // Tap / click target size
-
-        return (
-          <button
-            key={s.id}
-            onClick={() => onSelect(s.id)}
-            aria-label={`選擇 ${s.name}，危險指數 ${s.danger.toFixed(1)}`}
-            style={{
-              position: 'absolute',
-              left: `${s.x}%`, top: `${s.y}%`,
-              transform: 'translate(-50%, -50%)',
-              width: HIT, height: HIT,
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center',
-              gap: 4,
-              background: 'transparent', border: 'none',
-              cursor: 'pointer', padding: 0,
-              zIndex: isSel ? 5 : 2,
-            }}
-          >
-            {/* Dot */}
-            <span style={{
-              width: DOT, height: DOT, borderRadius: '50%',
-              background: color,
-              boxShadow: `0 0 ${isSel ? 20 : 10}px ${color}`,
-              border: isSel
-                ? '2.5px solid var(--surface-base)'
-                : '2px solid rgba(2,6,23,0.55)',
-              transition: 'all var(--dur-base) var(--ease-out)',
-              animation: s.danger >= 7.5 ? 'a3-breathe 1.8s var(--ease-out) infinite' : 'none',
-              flexShrink: 0,
-            }} />
-
-            {/* Label */}
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: mobile ? 11 : 10,
-              whiteSpace: 'nowrap',
-              padding: '2px 6px',
-              borderRadius: 'var(--radius-xs)',
-              background: 'rgba(2,6,23,0.75)',
-              color: isSel ? 'var(--text-primary)' : 'var(--text-muted)',
-              border: `1px solid ${isSel ? 'var(--border-accent)' : 'transparent'}`,
-              backdropFilter: 'blur(4px)',
-              pointerEvents: 'none',
-            }}>{s.name}</span>
-          </button>
-        );
-      })}
-
       {/* Critical hazard callout */}
-      <div style={{ position: 'absolute', right: '12%', top: '22%', transform: 'translate(0,-50%)', zIndex: 4 }}>
+      <div style={{ position: 'absolute', right: 14, top: 14, zIndex: 400 }}>
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 7,
-          padding: '6px 12px',
-          background: 'rgba(244,63,94,0.14)',
-          border: '1px solid var(--crit-border)',
-          borderRadius: 'var(--radius-full)',
-          backdropFilter: 'blur(6px)',
-          boxShadow: 'var(--glow-crit)',
+          display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px',
+          background: 'rgba(244,63,94,0.14)', border: '1px solid var(--crit-border)',
+          borderRadius: 'var(--radius-full)', backdropFilter: 'blur(6px)', boxShadow: 'var(--glow-crit)'
         }}>
           <Ico n="triangle-alert" s={{ width: 13, height: 13, color: 'var(--crit-text)' }} />
           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--crit-text)', whiteSpace: 'nowrap' }}>瘋狗浪危險區</span>
         </div>
       </div>
 
-      {/* Live scan badge (top-left) */}
-      <div style={{ position: 'absolute', left: 14, top: 14, zIndex: 6 }}>
-        <Badge tone={scanning ? 'cyan' : 'accent'} dot uppercase>
-          {scanning ? '掃描區段中…' : '即時 · 115 觀測站'}
-        </Badge>
-      </div>
-
       {/* Zoom controls */}
-      <div style={{ position: 'absolute', right: 14, bottom: mobile ? 14 : 80, display: 'flex', flexDirection: 'column', gap: 1, zIndex: 6 }}>
-        {['plus', 'minus'].map((n, i) => (
-          <button key={n} aria-label={n === 'plus' ? '放大' : '縮小'} style={{
-            width: mobile ? 40 : 32, height: mobile ? 40 : 32,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'var(--glass-bg)',
-            backdropFilter: 'blur(8px)',
-            color: 'var(--text-secondary)',
-            border: '1px solid var(--border-glass)',
-            cursor: 'pointer',
-            borderRadius: i === 0
-              ? 'var(--radius-sm) var(--radius-sm) 0 0'
-              : '0 0 var(--radius-sm) var(--radius-sm)',
-          }}>
-            <Ico n={n} s={{ width: 15, height: 15 }} />
-          </button>
-        ))}
+      <div style={{ position: 'absolute', right: 14, bottom: mobile ? 14 : 80, display: 'flex', flexDirection: 'column', gap: 1, zIndex: 400 }}>
+        <button aria-label="放大" onClick={() => mapRef.current?.zoomIn()} style={{
+          width: mobile ? 40 : 32, height: mobile ? 40 : 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'var(--glass-bg)', backdropFilter: 'blur(8px)', color: 'var(--text-secondary)',
+          border: '1px solid var(--border-glass)', cursor: 'pointer', borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0'
+        }}><Ico n="plus" s={{ width: 15, height: 15 }} /></button>
+        <button aria-label="縮小" onClick={() => mapRef.current?.zoomOut()} style={{
+          width: mobile ? 40 : 32, height: mobile ? 40 : 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'var(--glass-bg)', backdropFilter: 'blur(8px)', color: 'var(--text-secondary)',
+          border: '1px solid var(--border-glass)', cursor: 'pointer', borderRadius: '0 0 var(--radius-sm) var(--radius-sm)'
+        }}><Ico n="minus" s={{ width: 15, height: 15 }} /></button>
       </div>
 
       {/* Danger legend */}
       {!mobile && (
         <div className="a3-glass" style={{
-          position: 'absolute', left: 14, bottom: 14,
-          padding: '12px 14px', width: 224,
-          borderRadius: 'var(--radius-md)', zIndex: 6,
+          position: 'absolute', left: 14, bottom: 14, padding: '12px 14px', width: 224, borderRadius: 'var(--radius-md)', zIndex: 400
         }}>
-          <div style={{
-            fontSize: 10, fontWeight: 600,
-            letterSpacing: 'var(--tracking-caps)', textTransform: 'uppercase',
-            color: 'var(--text-muted)', marginBottom: 8,
-          }}>危險指數 0–10</div>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 'var(--tracking-caps)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>危險指數 0–10</div>
           <div style={{ height: 8, borderRadius: 'var(--radius-full)', background: 'var(--danger-scale)' }}></div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
-            {[0, 2.5, 5, 7.5, 10].map((n) => (
-              <span key={n} style={{
-                fontFamily: 'var(--font-mono)', fontSize: 9,
-                color: 'var(--text-faint)', fontVariantNumeric: 'tabular-nums',
-              }}>{n.toFixed(1)}</span>
-            ))}
+            {[0, 2.5, 5, 7.5, 10].map(n => <span key={n} style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', fontVariantNumeric: 'tabular-nums' }}>{n.toFixed(1)}</span>)}
           </div>
         </div>
       )}
 
-      {/* Mobile compact legend */}
       {mobile && (
         <div style={{
-          position: 'absolute', left: 14, bottom: 14,
-          padding: '8px 12px',
-          background: 'rgba(2,6,23,0.75)', backdropFilter: 'blur(8px)',
-          border: '1px solid var(--border-glass)',
-          borderRadius: 10, zIndex: 6,
-          display: 'flex', alignItems: 'center', gap: 10,
+          position: 'absolute', left: 14, bottom: 14, padding: '8px 12px', background: 'rgba(2,6,23,0.75)', backdropFilter: 'blur(8px)',
+          border: '1px solid var(--border-glass)', borderRadius: 10, zIndex: 400, display: 'flex', alignItems: 'center', gap: 10
         }}>
           <div style={{ width: 80, height: 6, borderRadius: 3, background: 'var(--danger-scale)' }}></div>
           <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>危險 0–10</span>
@@ -335,6 +535,7 @@ function GeospatialCanvas({ sectors, selectedId, onSelect, scanning, mobile = fa
     </div>
   );
 }
+
 
 
 
