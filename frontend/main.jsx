@@ -468,4 +468,19 @@ function App() {
   return                           <DesktopApp {...shared} />;
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  render() {
+    if (this.state.hasError) {
+      return <div style={{color:'#ff8080', background:'#111', padding:20, position:'absolute', inset:0, fontFamily:'monospace', overflow:'auto'}}>
+        <h3>React Render Error</h3>
+        <pre>{this.state.error.toString()}</pre>
+        <pre>{this.state.error.stack}</pre>
+      </div>;
+    }
+    return this.props.children;
+  }
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<ErrorBoundary><App /></ErrorBoundary>);
