@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" fill="none">
+  <defs>
+    <linearGradient id="bg192" x1="0" y1="0" x2="192" y2="192" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#131c30"></stop>
+      <stop offset="100%" stop-color="#020617"></stop>
+    </linearGradient>
+    <linearGradient id="danger192" x1="16" y1="0" x2="176" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1464ff"></stop>
+      <stop offset="25%" stop-color="#00ffff"></stop>
+      <stop offset="50%" stop-color="#ffff00"></stop>
+      <stop offset="75%" stop-color="#ff8c00"></stop>
+      <stop offset="100%" stop-color="#ff1e1e"></stop>
+    </linearGradient>
+  </defs>
+
+  
+  <rect width="192" height="192" rx="40" fill="url(#bg192)"></rect>
+
+  
+  <circle cx="96" cy="88" r="60" stroke="rgba(20,184,166,0.18)" stroke-width="1"></circle>
+  <circle cx="96" cy="88" r="44" stroke="rgba(20,184,166,0.12)" stroke-width="1"></circle>
+  <circle cx="96" cy="88" r="28" stroke="rgba(20,184,166,0.08)" stroke-width="1"></circle>
+
+  
+  <line x1="96" y1="20" x2="96" y2="156" stroke="rgba(94,234,212,0.10)" stroke-width="1"></line>
+  <line x1="28" y1="88" x2="164" y2="88" stroke="rgba(94,234,212,0.10)" stroke-width="1"></line>
+
+  
+  <text x="96" y="112" font-family="&#39;Courier New&#39;,Courier,monospace" font-weight="700" font-size="68" fill="white" text-anchor="middle" letter-spacing="-2">A3</text>
+
+  
+  <rect x="16" y="148" width="160" height="8" rx="4" fill="url(#danger192)"></rect>
+
+  
+  <text x="96" y="175" font-family="&#39;Courier New&#39;,Courier,monospace" font-size="11" fill="rgba(148,163,184,0.55)" text-anchor="middle" letter-spacing="3.5">MARITIME</text>
+</svg>
