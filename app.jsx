@@ -314,13 +314,18 @@ function drawDeepOceanGrid(map) {
         if(pSt!=="自由流動") color = window.dangerColor(node.wh*3.0+2.0);
         const flow=Math.max(0.6, 5.0-(node.cv*2));
         
+        let fadeMult = 1.0;
+        if (cDist < 0.015) { fadeMult = Math.max(0, (cDist - 0.0005) / 0.0145); }
+        if (fadeMult <= 0.05) return;
+        const opPeak = (0.55 * fadeMult).toFixed(2);
+        
         const html = `
             <div style="width:100%; height:100%; transform:rotate(${rot}deg); display:flex; align-items:center; justify-content:center;">
                 <svg width="100%" height="100%" viewBox="-50 -50 100 100">
-                    <g stroke="${color}" stroke-width="0.5" stroke-linecap="round" fill="none">
+                    <g stroke="${color}" stroke-width="0.25" stroke-linecap="round" fill="none">
                         <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
                             <animateTransform attributeName="transform" type="translate" from="0,-30" to="0,30" dur="${flow}s" repeatCount="indefinite" />
-                            <animate attributeName="opacity" values="0;0.45;0.45;0" keyTimes="0;0.2;0.8;1" dur="${flow}s" repeatCount="indefinite" />
+                            <animate attributeName="opacity" values="0;${opPeak};${opPeak};0" keyTimes="0;0.2;0.8;1" dur="${flow}s" repeatCount="indefinite" />
                         </path>
                     </g>
                 </svg>
@@ -350,7 +355,7 @@ window.bootEngine = async function(map) {
         });
         await loadCoastlinePolygon();
         await fetchDeepOceanData();
-        drawUnifiedCoastline(map);
+        // drawUnifiedCoastline(map); // Faded out entirely near coast
         drawDeepOceanGrid(map);
         
         // Setup strict scaling
