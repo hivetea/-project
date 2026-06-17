@@ -186,14 +186,8 @@ function simulateMarineConditionsIDW(lat, lng) {
 
 async function loadCoastlinePolygon() {
     try {
-        const res = await fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries/TWN.geo.json');
-        const geojson = await res.json();
-        const geom = geojson.features[0].geometry;
-        if (geom.type === 'Polygon') window.trueCoastlineRing = geom.coordinates[0];
-        else if (geom.type === 'MultiPolygon') {
-            let maxP = 0;
-            geom.coordinates.forEach(p => { if (p[0].length > maxP) { maxP = p[0].length; window.trueCoastlineRing = p[0]; } });
-        }
+        const res = await fetch('taiwan_coastline.json');
+        window.trueCoastlineRing = await res.json();
     } catch(err) { console.error("Coastline load failed", err); }
 }
 
@@ -211,7 +205,7 @@ async function fetchDeepOceanData() {
             const hexOff = (Math.round(lat/0.15)%2 === 0)?0:0.075;
             const finalLng = lng+hexOff;
             const inside = window.trueCoastlineRing.length > 0 && isPointInPolygon([finalLng,lat], window.trueCoastlineRing);
-            if (!inside && minDistSq > 0.005) { lats.push(lat.toFixed(3)); lngs.push(finalLng.toFixed(3)); }
+            if (!inside && minDistSq > 0.0005) { lats.push(lat.toFixed(3)); lngs.push(finalLng.toFixed(3)); }
         }
     }
     if (lats.length===0) return;
