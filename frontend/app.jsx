@@ -193,8 +193,8 @@ async function loadCoastlinePolygon() {
 
 async function fetchDeepOceanData() {
     const lats = []; const lngs = [];
-    for (let lat = 21.0; lat <= 26.0; lat += 0.15) {
-        for (let lng = 119.0; lng <= 123.0; lng += 0.15) {
+    for (let lat = 21.0; lat <= 26.0; lat += 0.08) {
+        for (let lng = 119.0; lng <= 123.0; lng += 0.08) {
             let minDistSq = Infinity;
             if (window.trueCoastlineRing.length > 0) {
                 window.trueCoastlineRing.forEach(c => {
@@ -202,7 +202,7 @@ async function fetchDeepOceanData() {
                     if (d < minDistSq) minDistSq = d;
                 });
             } else { minDistSq = Math.pow(lat-23.7, 2)+Math.pow(lng-121.0, 2); }
-            const hexOff = (Math.round(lat/0.15)%2 === 0)?0:0.075;
+            const hexOff = (Math.round(lat/0.08)%2 === 0)?0:0.04;
             const finalLng = lng+hexOff;
             const inside = window.trueCoastlineRing.length > 0 && isPointInPolygon([finalLng,lat], window.trueCoastlineRing);
             if (!inside && minDistSq > 0.0005) { lats.push(lat.toFixed(3)); lngs.push(finalLng.toFixed(3)); }
@@ -229,7 +229,7 @@ async function fetchDeepOceanData() {
 
 function drawUnifiedCoastline(map) {
     if(window.trueCoastlineRing.length===0)return;
-    const step=Math.max(1,Math.ceil(window.trueCoastlineRing.length/300));
+    const step=Math.max(1,Math.ceil(window.trueCoastlineRing.length/600));
     const sampled=[];
     for(let i=0; i<window.trueCoastlineRing.length; i+=step) sampled.push(window.trueCoastlineRing[i]);
     sampled.forEach((coord, i)=>{
@@ -262,14 +262,14 @@ function drawUnifiedCoastline(map) {
         let st = `狀態: <b style="color: #0ff;">局部風浪</b>`;
         if(cSwell>0){ fWh+=(cSwell*0.8); fDs+=(cSwell*4.0); st=`狀態: <b style="color: #ff3300;">⚠️ 偵測到外海湧浪碰撞</b>`; }
         const rot = -(normalRad*180/Math.PI)-90;
-        const bW=20+(fWh*4.0); const bH=20+(fWh*4.0);
+        const bW=12+(fWh*2.5); const bH=12+(fWh*2.5);
         const color = window.dangerColor(fDs);
         const flow = Math.max(0.6, 2.5-(sim.wind_speed*0.05));
         
         const html = `
             <div style="width:100%; height:100%; transform:rotate(${rot}deg); display:flex; align-items:center; justify-content:center;">
                 <svg width="100%" height="100%" viewBox="-50 -50 100 100">
-                    <g stroke="${color}" stroke-width="2.5" stroke-linecap="round" fill="none">
+                    <g stroke="${color}" stroke-width="0.5" stroke-linecap="round" fill="none">
                         <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
                             <animateTransform attributeName="transform" type="translate" from="0,-30" to="0,30" dur="${flow}s" repeatCount="indefinite" />
                             <animate attributeName="opacity" values="0;0.55;0.55;0" keyTimes="0;0.2;0.8;1" dur="${flow}s" repeatCount="indefinite" />
@@ -309,7 +309,7 @@ function drawDeepOceanGrid(map) {
                 rot=-(fF*180/Math.PI)-90;
             }
         }
-        const bW=15+(node.wh*3.0); const bH=15+(node.wh*3.0);
+        const bW=9+(node.wh*2.0); const bH=9+(node.wh*2.0);
         let color = window.dangerColor(node.wh*3.0);
         if(pSt!=="自由流動") color = window.dangerColor(node.wh*3.0+2.0);
         const flow=Math.max(0.6, 5.0-(node.cv*2));
@@ -317,7 +317,7 @@ function drawDeepOceanGrid(map) {
         const html = `
             <div style="width:100%; height:100%; transform:rotate(${rot}deg); display:flex; align-items:center; justify-content:center;">
                 <svg width="100%" height="100%" viewBox="-50 -50 100 100">
-                    <g stroke="${color}" stroke-width="1.5" stroke-linecap="round" fill="none">
+                    <g stroke="${color}" stroke-width="0.5" stroke-linecap="round" fill="none">
                         <path d="M-40 0 Q -20 -15, 0 0 T 40 0">
                             <animateTransform attributeName="transform" type="translate" from="0,-30" to="0,30" dur="${flow}s" repeatCount="indefinite" />
                             <animate attributeName="opacity" values="0;0.45;0.45;0" keyTimes="0;0.2;0.8;1" dur="${flow}s" repeatCount="indefinite" />
