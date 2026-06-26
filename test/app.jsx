@@ -484,7 +484,7 @@ function GeospatialCanvas({ sectors, selectedId, onSelect, scanning, mobile = fa
       {/* Live scan badge */}
       <div style={{ position: 'absolute', left: 14, top: 14, zIndex: 400 }}>
         <Badge tone={scanning ? 'cyan' : 'accent'} dot uppercase>
-          {scanning ? '掃描區段中…' : '即時 · 115 觀測站'}
+          {scanning ? <span>掃描區段中…</span> : <span>即時 · 115 觀測站</span>}
         </Badge>
       </div>
 
