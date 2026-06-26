@@ -40,6 +40,9 @@
     from { opacity: 0; transform: translateY(16px); }
     to   { opacity: 1; transform: translateY(0); }
   }
+
+  /* Prevent children of scrollable containers from shrinking and clipping */
+  .a3-scroll > * { flex-shrink: 0 !important; }
 </style>
 </head>
 <body>
