@@ -402,11 +402,6 @@ function GeospatialCanvas({ sectors, selectedId, onSelect, scanning, mobile = fa
     const map = mapRef.current;
     
     sectors.forEach(s => {
-       const mLat = s.coord.match(/([\d.]+)°N/);
-       const mLng = s.coord.match(/([\d.]+)°E/);
-       if(!mLat || !mLng) return;
-       const lat = parseFloat(mLat[1]); const lng = parseFloat(mLng[1]);
-       
        const isSel = s.id === selectedId;
        const DOT = mobile ? (isSel ? 22 : 18) : (isSel ? 18 : 13);
        const color = window.dangerColor(s.danger);
@@ -432,15 +427,21 @@ function GeospatialCanvas({ sectors, selectedId, onSelect, scanning, mobile = fa
        
        if (markersRef.current[s.id]) {
           const m = markersRef.current[s.id];
-          m.setIcon(L.divIcon({ className: '', html, iconSize: [DOT, DOT], iconAnchor: [DOT/2, DOT/2] }));
-          m.off('click');
-          m.on('click', () => onSelect(s.id));
+          if (m._lastIsSel !== isSel || m._lastDanger !== s.danger) {
+             m.setIcon(L.divIcon({ className: '', html, iconSize: [DOT, DOT], iconAnchor: [DOT/2, DOT/2] }));
+             m.setZIndexOffset(isSel ? 1000 : Math.round(s.danger * 10));
+             m._lastIsSel = isSel;
+             m._lastDanger = s.danger;
+          }
        } else {
           const m = L.marker([lat, lng], {
             icon: L.divIcon({ className: '', html, iconSize: [DOT, DOT], iconAnchor: [DOT/2, DOT/2] }),
-            zIndexOffset: 1000
+            interactive: true,
+            zIndexOffset: isSel ? 1000 : Math.round(s.danger * 10)
           }).addTo(map);
           m.on('click', () => onSelect(s.id));
+          m._lastIsSel = isSel;
+          m._lastDanger = s.danger;
           markersRef.current[s.id] = m;
        }
        if (isSel && mapRef.current) {
@@ -504,13 +505,15 @@ function GeospatialCanvas({ sectors, selectedId, onSelect, scanning, mobile = fa
         <button aria-label="放大" onClick={() => mapRef.current?.zoomIn()} style={{
           width: mobile ? 40 : 32, height: mobile ? 40 : 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'var(--glass-bg)', backdropFilter: 'blur(8px)', color: 'var(--text-secondary)',
-          border: '1px solid var(--border-glass)', cursor: 'pointer', borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0'
-        }}><Ico n="plus" s={{ width: 15, height: 15 }} /></button>
+          border: '1px solid var(--border-glass)', cursor: 'pointer', borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0',
+          fontSize: '18px', fontWeight: 'bold'
+        }}>＋</button>
         <button aria-label="縮小" onClick={() => mapRef.current?.zoomOut()} style={{
           width: mobile ? 40 : 32, height: mobile ? 40 : 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'var(--glass-bg)', backdropFilter: 'blur(8px)', color: 'var(--text-secondary)',
-          border: '1px solid var(--border-glass)', cursor: 'pointer', borderRadius: '0 0 var(--radius-sm) var(--radius-sm)'
-        }}><Ico n="minus" s={{ width: 15, height: 15 }} /></button>
+          border: '1px solid var(--border-glass)', cursor: 'pointer', borderRadius: '0 0 var(--radius-sm) var(--radius-sm)',
+          fontSize: '18px', fontWeight: 'bold'
+        }}>－</button>
       </div>
 
       {/* Danger legend */}
@@ -1194,7 +1197,63 @@ function App() {
   const [layout,      setLayout]      = React.useState(getLayout);
 
   const [customSectors, setCustomSectors] = React.useState([]);
+  const [baseSectors, setBaseSectors] = React.useState(RAW_SECTORS);
   const [searchQuery, setSearchQuery] = React.useState('');
+
+  /* Load all 115 stations from coastal_stations.json */
+  React.useEffect(() => {
+    fetch('coastal_stations.json')
+      .then(res => res.json())
+      .then(data => {
+        if (!window.mockApi) return;
+        const features = Array.isArray(data) ? data : (data.features || []);
+        const mapped = features.map(st => {
+          try {
+            const latStr = st.GeoInfo?.Coordinates?.[1]?.StationLatitude || st.GeoInfo?.Coordinates?.[0]?.StationLatitude;
+            const lonStr = st.GeoInfo?.Coordinates?.[1]?.StationLongitude || st.GeoInfo?.Coordinates?.[0]?.StationLongitude;
+            if (!latStr || !lonStr) return null;
+            const lat = parseFloat(latStr);
+            const lon = parseFloat(lonStr);
+            if (isNaN(lat) || isNaN(lon)) return null;
+            
+            const res = window.mockApi.assessRisk(lat, lon);
+            const isErr = !!res.error;
+            const rules = isErr ? [] : res.matched_rules.map((r, i) => ({ id: 'R'+i, text: r, sim: 0.9 }));
+            
+            let danger = 2.0;
+            if (!isErr) {
+              danger = res.risk_level === 'Extreme' ? 9.5 : (res.risk_level === 'High' ? 8.0 : (res.risk_level === 'Moderate' ? 5.0 : 2.0));
+            }
+            
+            return {
+              id: st.StationId,
+              name: st.StationName,
+              station: st.StationId,
+              coord: `${lat.toFixed(2)}°N ${lon.toFixed(2)}°E`,
+              lat, lng: lon,
+              danger: danger,
+              wind: st.WeatherElement?.WindSpeed === '-99' ? '0' : (st.WeatherElement?.WindSpeed || '0'),
+              windDir: st.WeatherElement?.WindDirection === '-99' ? '平靜' : (st.WeatherElement?.WindDirection || '0') + '°',
+              waves: isErr ? '1.0' : (res.weather_context?.wave_height || '1.0'),
+              tide: isErr ? '平潮' : (res.weather_context?.tide_status || '平潮'),
+              current: '1.0',
+              rules: rules,
+              rec: {
+                title: isErr ? "正常" : res.risk_level + " 警戒",
+                body: isErr ? "無特殊狀況。" : res.reasoning + " " + res.navigational_advice
+              }
+            };
+          } catch(e) { return null; }
+        }).filter(Boolean);
+        
+        setBaseSectors(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const newSectors = mapped.filter(m => !existingIds.has(m.id));
+          return [...prev, ...newSectors];
+        });
+      })
+      .catch(err => console.error('Failed to load coastal_stations:', err));
+  }, []);
 
   /* Restore last selected sector from localStorage */
   React.useEffect(() => {
@@ -1229,8 +1288,8 @@ function App() {
 
   /* Enrich sectors with computed color */
   const sectors = React.useMemo(
-    () => [...customSectors, ...RAW_SECTORS].map((s) => ({ ...s, color: dangerColor(s.danger) })),
-    [customSectors]
+    () => [...customSectors, ...baseSectors].map((s) => ({ ...s, color: dangerColor(s.danger) })),
+    [customSectors, baseSectors]
   );
   const sector = sectors.find((s) => s.id === selectedId) || sectors[0];
 
