@@ -102,7 +102,7 @@ function Header({ clock, compact = false, searchQuery, setSearchQuery, onSearch 
       {/* Nav */}
       <nav style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 28 }}>
         {[['作業總覽', true], ['海象預報', false], ['規則庫', false], ['觀測站', false]].map(([t, active]) => (
-          <span key={t} style={{
+          <span key={t} onClick={() => !active && alert('POC 展示版本：此功能區塊建置中')} style={{
             padding: '7px 14px', fontSize: 'var(--text-sm)',
             borderRadius: 'var(--radius-sm)', cursor: 'pointer',
             color: active ? 'var(--text-primary)' : 'var(--text-muted)',
@@ -575,7 +575,7 @@ function TelemetryRail({ sector, sectors, selectedId, onSelect, mobile = false }
 
   const containerStyle = mobile
     ? { display: 'flex', flexDirection: 'column', gap: 12 }
-    : { display: 'flex', flexDirection: 'column', gap: 'var(--gap-grid)', width: 296, flexShrink: 0, overflowY: 'auto' };
+    : { display: 'flex', flexDirection: 'column', gap: 'var(--gap-grid)', width: 296, flexShrink: 0, overflowY: 'auto', minHeight: 0, paddingRight: 4 };
 
   return (
     <div className={mobile ? '' : 'a3-scroll'} style={containerStyle}>
@@ -701,7 +701,7 @@ function RagFeed({ sector, scanning, onRerun, mobile = false }) {
 
   const containerStyle = mobile
     ? { display: 'flex', flexDirection: 'column', gap: 12 }
-    : { display: 'flex', flexDirection: 'column', gap: 'var(--gap-grid)', width: 352, flexShrink: 0, overflowY: 'auto' };
+    : { display: 'flex', flexDirection: 'column', gap: 'var(--gap-grid)', width: 352, flexShrink: 0, overflowY: 'auto', minHeight: 0, paddingRight: 4 };
 
   return (
     <div className={mobile ? '' : 'a3-scroll'} style={containerStyle}>
