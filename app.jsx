@@ -22,7 +22,7 @@ function Ico({ n, s }) {
  * compact=true  → 48px mobile bar (logo + live dot + clock)
  * compact=false → 60px desktop bar (logo + nav + status + controls)
  */
-function Header({ clock, compact = false }) {
+function Header({ clock, compact = false, searchQuery, setSearchQuery, onSearch }) {
   const { StatusBadge } = window.A3MaritimeIntelligenceDesignSystem_4ef093;
 
   /* ── Mobile / Compact ────────────────────────────────────── */
@@ -102,7 +102,7 @@ function Header({ clock, compact = false }) {
       {/* Nav */}
       <nav style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 28 }}>
         {[['作業總覽', true], ['海象預報', false], ['規則庫', false], ['觀測站', false]].map(([t, active]) => (
-          <span key={t} style={{
+          <span key={t} onClick={() => !active && alert('POC 展示版本：此功能區塊建置中')} style={{
             padding: '7px 14px', fontSize: 'var(--text-sm)',
             borderRadius: 'var(--radius-sm)', cursor: 'pointer',
             color: active ? 'var(--text-primary)' : 'var(--text-muted)',
@@ -121,12 +121,12 @@ function Header({ clock, compact = false }) {
         }}>{clock} <span style={{ color: 'var(--text-faint)' }}>UTC+8</span></span>
         <StatusBadge label="AI 引擎" status="上線" tone="ok" />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-muted)' }}>
-          <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 4 }}>
-            <Ico n="bell" s={{ width: 17, height: 17 }} />
-          </button>
-          <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 4 }}>
-            <Ico n="settings" s={{ width: 17, height: 17 }} />
-          </button>
+          <form onSubmit={(e) => { e.preventDefault(); if(onSearch) onSearch(searchQuery); }} style={{display:'flex', gap: 6, alignItems: 'center'}}>
+             <input type="text" placeholder="緯度, 經度 (例: 25.1, 121.7)" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} style={{ background: 'var(--surface-base)', border: '1px solid var(--border-default)', color: 'var(--text-primary)', padding: '6px 10px', borderRadius: 6, fontSize: 13, width: 180, outline: 'none' }} />
+             <button type="submit" style={{ background: 'var(--accent)', border: 'none', color: '#000', padding: '6px 12px', borderRadius: 6, fontSize: 13, cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Ico n="search" s={{ width: 14, height: 14 }} /> 分析
+             </button>
+          </form>
           <div style={{
             width: 30, height: 30, borderRadius: '50%',
             background: 'var(--surface-raised)',
@@ -134,6 +134,7 @@ function Header({ clock, compact = false }) {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontFamily: 'var(--font-mono)', fontSize: 11,
             color: 'var(--text-secondary)', fontWeight: 600,
+            marginLeft: 8
           }}>OC</div>
         </div>
       </div>
@@ -391,7 +392,7 @@ function GeospatialCanvas({ sectors, selectedId, onSelect, scanning, mobile = fa
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 20 }).addTo(map);
     mapRef.current = map;
     
-    window.bootEngine(map);
+    // window.bootEngine(map); // Temporarily disabled due to extreme lag from 630 SVG animations
     
     return () => { map.remove(); mapRef.current = null; };
   }, []);
@@ -401,14 +402,24 @@ function GeospatialCanvas({ sectors, selectedId, onSelect, scanning, mobile = fa
     const map = mapRef.current;
     
     sectors.forEach(s => {
-       const mLat = s.coord.match(/([\d.]+)°N/);
-       const mLng = s.coord.match(/([\d.]+)°E/);
-       if(!mLat || !mLng) return;
-       const lat = parseFloat(mLat[1]); const lng = parseFloat(mLng[1]);
-       
        const isSel = s.id === selectedId;
        const DOT = mobile ? (isSel ? 22 : 18) : (isSel ? 18 : 13);
        const color = window.dangerColor(s.danger);
+       let lat = s.lat;
+       let lng = s.lon || s.lng;
+       
+       if (lat === undefined || lng === undefined) {
+         if (s.coord) {
+           const parts = s.coord.replace(/[^\d. -]/g, ' ').trim().split(/\s+/);
+           lat = parseFloat(parts[0]);
+           lng = parseFloat(parts[1]);
+           console.log('Parsed coord:', s.coord, '->', lat, lng, parts);
+         }
+       }
+       if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng)) {
+         console.warn('Skipping marker due to invalid lat/lng:', s.id, lat, lng);
+         return;
+       }
        
        const html = `
          <div style="position:relative; width:${DOT}px; height:${DOT}px; display:flex; align-items:center; justify-content:center;">
@@ -431,16 +442,25 @@ function GeospatialCanvas({ sectors, selectedId, onSelect, scanning, mobile = fa
        
        if (markersRef.current[s.id]) {
           const m = markersRef.current[s.id];
-          m.setIcon(L.divIcon({ className: '', html, iconSize: [DOT, DOT], iconAnchor: [DOT/2, DOT/2] }));
-          m.off('click');
-          m.on('click', () => onSelect(s.id));
+          if (m._lastIsSel !== isSel || m._lastDanger !== s.danger) {
+             m.setIcon(L.divIcon({ className: '', html, iconSize: [DOT, DOT], iconAnchor: [DOT/2, DOT/2] }));
+             m.setZIndexOffset(isSel ? 1000 : Math.round(s.danger * 10));
+             m._lastIsSel = isSel;
+             m._lastDanger = s.danger;
+          }
        } else {
           const m = L.marker([lat, lng], {
             icon: L.divIcon({ className: '', html, iconSize: [DOT, DOT], iconAnchor: [DOT/2, DOT/2] }),
-            zIndexOffset: 1000
+            interactive: true,
+            zIndexOffset: isSel ? 1000 : Math.round(s.danger * 10)
           }).addTo(map);
           m.on('click', () => onSelect(s.id));
+          m._lastIsSel = isSel;
+          m._lastDanger = s.danger;
           markersRef.current[s.id] = m;
+       }
+       if (isSel && mapRef.current) {
+          mapRef.current.flyTo([lat, lng], 10, { animate: true, duration: 1.0 });
        }
     });
   }, [sectors, selectedId, mobile]);
@@ -479,7 +499,7 @@ function GeospatialCanvas({ sectors, selectedId, onSelect, scanning, mobile = fa
       {/* Live scan badge */}
       <div style={{ position: 'absolute', left: 14, top: 14, zIndex: 400 }}>
         <Badge tone={scanning ? 'cyan' : 'accent'} dot uppercase>
-          {scanning ? '掃描區段中…' : '即時 · 115 觀測站'}
+          {scanning ? <span>掃描區段中…</span> : <span>即時 · 115 觀測站</span>}
         </Badge>
       </div>
 
@@ -500,13 +520,15 @@ function GeospatialCanvas({ sectors, selectedId, onSelect, scanning, mobile = fa
         <button aria-label="放大" onClick={() => mapRef.current?.zoomIn()} style={{
           width: mobile ? 40 : 32, height: mobile ? 40 : 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'var(--glass-bg)', backdropFilter: 'blur(8px)', color: 'var(--text-secondary)',
-          border: '1px solid var(--border-glass)', cursor: 'pointer', borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0'
-        }}><Ico n="plus" s={{ width: 15, height: 15 }} /></button>
+          border: '1px solid var(--border-glass)', cursor: 'pointer', borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0',
+          fontSize: '18px', fontWeight: 'bold'
+        }}>＋</button>
         <button aria-label="縮小" onClick={() => mapRef.current?.zoomOut()} style={{
           width: mobile ? 40 : 32, height: mobile ? 40 : 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'var(--glass-bg)', backdropFilter: 'blur(8px)', color: 'var(--text-secondary)',
-          border: '1px solid var(--border-glass)', cursor: 'pointer', borderRadius: '0 0 var(--radius-sm) var(--radius-sm)'
-        }}><Ico n="minus" s={{ width: 15, height: 15 }} /></button>
+          border: '1px solid var(--border-glass)', cursor: 'pointer', borderRadius: '0 0 var(--radius-sm) var(--radius-sm)',
+          fontSize: '18px', fontWeight: 'bold'
+        }}>－</button>
       </div>
 
       {/* Danger legend */}
@@ -553,13 +575,13 @@ function TelemetryRail({ sector, sectors, selectedId, onSelect, mobile = false }
 
   const containerStyle = mobile
     ? { display: 'flex', flexDirection: 'column', gap: 12 }
-    : { display: 'flex', flexDirection: 'column', gap: 'var(--gap-grid)', width: 296, flexShrink: 0, overflowY: 'auto' };
+    : { display: 'flex', flexDirection: 'column', gap: 'var(--gap-grid)', width: 296, flexShrink: 0, overflowY: 'auto', minHeight: 0, paddingRight: 4 };
 
   return (
     <div className={mobile ? '' : 'a3-scroll'} style={containerStyle}>
 
       {/* ── Live telemetry card ───────────────────────────── */}
-      <Card eyebrow="即時遙測" title={sector.name} action={<Badge tone="ok" dot>即時</Badge>}>
+      <Card eyebrow="即時遙測" title={sector.name} action={<Badge tone="ok" dot>即時</Badge>} style={{ flexShrink: 0 }}>
 
         {/* Coordinate / station */}
         <div style={{
@@ -610,7 +632,7 @@ function TelemetryRail({ sector, sectors, selectedId, onSelect, mobile = false }
       </Card>
 
       {/* ── Sector watchlist ─────────────────────────────── */}
-      <Card eyebrow="區段監視" title="海岸網格" padding="var(--pad-card)">
+      <Card eyebrow="區段監視" title="海岸網格" padding="var(--pad-card)" style={{ flexShrink: 0 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: mobile ? 10 : 8 }}>
           {sectors.map((s) => {
             const isSel = s.id === selectedId;
@@ -679,7 +701,7 @@ function RagFeed({ sector, scanning, onRerun, mobile = false }) {
 
   const containerStyle = mobile
     ? { display: 'flex', flexDirection: 'column', gap: 12 }
-    : { display: 'flex', flexDirection: 'column', gap: 'var(--gap-grid)', width: 352, flexShrink: 0, overflowY: 'auto' };
+    : { display: 'flex', flexDirection: 'column', gap: 'var(--gap-grid)', width: 352, flexShrink: 0, overflowY: 'auto', minHeight: 0, paddingRight: 4 };
 
   return (
     <div className={mobile ? '' : 'a3-scroll'} style={containerStyle}>
@@ -715,6 +737,7 @@ function RagFeed({ sector, scanning, onRerun, mobile = false }) {
           </Button>
         }
         bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 10 }}
+        style={{ flexShrink: 0 }}
       >
         {/* Query echo */}
         <div style={{
@@ -725,6 +748,7 @@ function RagFeed({ sector, scanning, onRerun, mobile = false }) {
           borderRadius: 'var(--radius-md)',
           fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)',
           color: 'var(--text-muted)',
+          flexShrink: 0,
         }}>
           <Ico n="search" s={{ width: 13, height: 13, color: 'var(--data-cyan)' }} />
           <span style={{ color: 'var(--text-secondary)', marginRight: 4 }}>查詢:</span>
@@ -733,7 +757,7 @@ function RagFeed({ sector, scanning, onRerun, mobile = false }) {
 
         {/* Scan sweep or stats row */}
         {scanning ? (
-          <div style={{ position: 'relative', height: 3, borderRadius: 'var(--radius-full)', background: 'var(--surface-raised)', overflow: 'hidden' }}>
+          <div style={{ position: 'relative', height: 3, borderRadius: 'var(--radius-full)', background: 'var(--surface-raised)', overflow: 'hidden', flexShrink: 0 }}>
             <div style={{
               position: 'absolute', top: 0, bottom: 0, width: '33%',
               background: 'linear-gradient(90deg,transparent,var(--data-cyan),transparent)',
@@ -744,6 +768,7 @@ function RagFeed({ sector, scanning, onRerun, mobile = false }) {
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)',
+            flexShrink: 0,
           }}>
             <span>檢索到 {rules.length} 條規則</span>
             <span>top-k=3 · ef=128 · 0.18s</span>
@@ -1142,10 +1167,10 @@ function MobileApp({ sectors, sector, selectedId, scanning, clock, mobileView, s
 /* ══════════════════════════════════════════════════════════
    TABLET LAYOUT (768–1199px)
    ══════════════════════════════════════════════════════════ */
-function TabletApp({ sectors, sector, selectedId, scanning, clock, runScan }) {
+function TabletApp({ sectors, sector, selectedId, scanning, clock, runScan, searchQuery, setSearchQuery, onSearch }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--surface-base)' }}>
-      <Header clock={clock} />
+      <Header clock={clock} searchQuery={searchQuery} setSearchQuery={setSearchQuery} onSearch={onSearch} />
       <main style={{ flex: 1, minHeight: 0, display: 'flex', gap: 12, padding: 12 }}>
         <GeospatialCanvas sectors={sectors} selectedId={selectedId} onSelect={runScan} scanning={scanning} />
         <div style={{ width: 300, flexShrink: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} className="a3-scroll">
@@ -1159,10 +1184,10 @@ function TabletApp({ sectors, sector, selectedId, scanning, clock, runScan }) {
 /* ══════════════════════════════════════════════════════════
    DESKTOP LAYOUT (1200px+)
    ══════════════════════════════════════════════════════════ */
-function DesktopApp({ sectors, sector, selectedId, scanning, clock, runScan }) {
+function DesktopApp({ sectors, sector, selectedId, scanning, clock, runScan, searchQuery, setSearchQuery, onSearch }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--surface-base)' }}>
-      <Header clock={clock} />
+      <Header clock={clock} searchQuery={searchQuery} setSearchQuery={setSearchQuery} onSearch={onSearch} />
       <main style={{ flex: 1, minHeight: 0, display: 'flex', gap: 'var(--gap-grid)', padding: 'var(--gap-grid)' }}>
         <TelemetryRail sector={sector} sectors={sectors} selectedId={selectedId} onSelect={runScan} />
         <GeospatialCanvas sectors={sectors} selectedId={selectedId} onSelect={runScan} scanning={scanning} />
@@ -1188,6 +1213,65 @@ function App() {
   const [clock,       setClock]       = React.useState('--:--:--');
   const [mobileView,  setMobileView]  = React.useState('map');
   const [layout,      setLayout]      = React.useState(getLayout);
+
+  const [customSectors, setCustomSectors] = React.useState([]);
+  const [baseSectors, setBaseSectors] = React.useState(RAW_SECTORS);
+  const [searchQuery, setSearchQuery] = React.useState('');
+
+  /* Load all 115 stations from coastal_stations.json */
+  React.useEffect(() => {
+    fetch('coastal_stations.json')
+      .then(res => res.json())
+      .then(data => {
+        if (!window.mockApi) return;
+        const features = Array.isArray(data) ? data : (data.features || []);
+        const mapped = features.map(st => {
+          try {
+            const latStr = st.GeoInfo?.Coordinates?.[1]?.StationLatitude || st.GeoInfo?.Coordinates?.[0]?.StationLatitude;
+            const lonStr = st.GeoInfo?.Coordinates?.[1]?.StationLongitude || st.GeoInfo?.Coordinates?.[0]?.StationLongitude;
+            if (!latStr || !lonStr) return null;
+            const lat = parseFloat(latStr);
+            const lon = parseFloat(lonStr);
+            if (isNaN(lat) || isNaN(lon)) return null;
+            
+            const res = window.mockApi.assessRisk(lat, lon);
+            const isErr = !!res.error;
+            const rules = isErr ? [] : res.matched_rules.map((r, i) => ({ id: 'R'+i, text: r, sim: 0.9 }));
+            
+            let danger = 2.0;
+            if (!isErr) {
+              danger = res.risk_level === 'Extreme' ? 9.5 : (res.risk_level === 'High' ? 8.0 : (res.risk_level === 'Moderate' ? 5.0 : 2.0));
+            }
+            
+            return {
+              id: st.StationId,
+              name: st.StationName,
+              station: st.StationId,
+              coord: `${lat.toFixed(2)}°N ${lon.toFixed(2)}°E`,
+              lat, lng: lon,
+              danger: danger,
+              wind: st.WeatherElement?.WindSpeed === '-99' ? '0' : (st.WeatherElement?.WindSpeed || '0'),
+              windDir: st.WeatherElement?.WindDirection === '-99' ? '平靜' : (st.WeatherElement?.WindDirection || '0') + '°',
+              waves: isErr ? '1.0' : (res.weather_context?.wave_height || '1.0'),
+              tide: isErr ? '平潮' : (res.weather_context?.tide_status || '平潮'),
+              current: '1.0',
+              rules: rules,
+              rec: {
+                title: isErr ? "正常" : res.risk_level + " 警戒",
+                body: isErr ? "無特殊狀況。" : res.reasoning + " " + res.navigational_advice
+              }
+            };
+          } catch(e) { return null; }
+        }).filter(Boolean);
+        
+        setBaseSectors(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const newSectors = mapped.filter(m => !existingIds.has(m.id));
+          return [...prev, ...newSectors];
+        });
+      })
+      .catch(err => console.error('Failed to load coastal_stations:', err));
+  }, []);
 
   /* Restore last selected sector from localStorage */
   React.useEffect(() => {
@@ -1222,8 +1306,8 @@ function App() {
 
   /* Enrich sectors with computed color */
   const sectors = React.useMemo(
-    () => RAW_SECTORS.map((s) => ({ ...s, color: dangerColor(s.danger) })),
-    []
+    () => [...customSectors, ...baseSectors].map((s) => ({ ...s, color: dangerColor(s.danger) })),
+    [customSectors, baseSectors]
   );
   const sector = sectors.find((s) => s.id === selectedId) || sectors[0];
 
@@ -1234,7 +1318,51 @@ function App() {
     setTimeout(() => setScanning(false), 1100);
   }, []);
 
-  const shared = { sectors, sector, selectedId, scanning, clock, runScan };
+  /* Search handler */
+  const onSearch = React.useCallback((query) => {
+    const parts = query.split(',').map(s => parseFloat(s.trim()));
+    if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) {
+      alert("請輸入有效的緯度與經度，例如: 25.1, 121.7");
+      return;
+    }
+    const [lat, lon] = parts;
+    if (!window.mockApi) {
+      alert("Mock API 未載入");
+      return;
+    }
+    
+    setScanning(true);
+    const result = window.mockApi.assessRisk(lat, lon);
+    
+    setTimeout(() => {
+        setScanning(false);
+        if (result.error) {
+          alert(result.error);
+        } else {
+          // Create custom sector mapping
+          const newSector = {
+            id: 'custom-' + Date.now(),
+            name: '自訂分析海域',
+            desc: `緯度: ${lat.toFixed(4)}, 經度: ${lon.toFixed(4)}`,
+            lat,
+            lng: lon,
+            danger: result.risk_level === 'Extreme' ? 9.5 : result.risk_level === 'High' ? 8.0 : result.risk_level === 'Moderate' ? 5.0 : 2.0,
+            trend: 'up',
+            wave_height: result.weather_context.wave_height,
+            wind_speed: result.weather_context.wind_speed,
+            rules: result.matched_rules.map((r, i) => ({ ruleId: 'R'+i, text: r, confidence: 95 })),
+            rec: {
+              title: result.risk_level + " 警戒",
+              body: result.reasoning + " " + result.navigational_advice
+            }
+          };
+          setCustomSectors(prev => [newSector, ...prev]);
+          setSelectedId(newSector.id);
+        }
+    }, 1200);
+  }, []);
+
+  const shared = { sectors, sector, selectedId, scanning, clock, runScan, searchQuery, setSearchQuery, onSearch };
 
   if (layout === 'mobile')  return <MobileApp  {...shared} mobileView={mobileView} setMobileView={setMobileView} />;
   if (layout === 'tablet')  return <TabletApp  {...shared} />;
