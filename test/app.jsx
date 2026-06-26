@@ -405,10 +405,17 @@ function GeospatialCanvas({ sectors, selectedId, onSelect, scanning, mobile = fa
        const isSel = s.id === selectedId;
        const DOT = mobile ? (isSel ? 22 : 18) : (isSel ? 18 : 13);
        const color = window.dangerColor(s.danger);
-       const lat = s.lat;
-       const lng = s.lon || s.lng;
+       let lat = s.lat;
+       let lng = s.lon || s.lng;
        
-       if (lat === undefined || lng === undefined) return;
+       if (lat === undefined || lng === undefined) {
+         if (s.coord) {
+           const parts = s.coord.replace(/[°NE]/g, '').split(' ');
+           lat = parseFloat(parts[0]);
+           lng = parseFloat(parts[1]);
+         }
+       }
+       if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng)) return;
        
        const html = `
          <div style="position:relative; width:${DOT}px; height:${DOT}px; display:flex; align-items:center; justify-content:center;">
