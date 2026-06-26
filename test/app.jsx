@@ -581,7 +581,7 @@ function TelemetryRail({ sector, sectors, selectedId, onSelect, mobile = false }
     <div className={mobile ? '' : 'a3-scroll'} style={containerStyle}>
 
       {/* ── Live telemetry card ───────────────────────────── */}
-      <Card eyebrow="即時遙測" title={sector.name} action={<Badge tone="ok" dot>即時</Badge>}>
+      <Card eyebrow="即時遙測" title={sector.name} action={<Badge tone="ok" dot>即時</Badge>} style={{ flexShrink: 0 }}>
 
         {/* Coordinate / station */}
         <div style={{
@@ -632,7 +632,7 @@ function TelemetryRail({ sector, sectors, selectedId, onSelect, mobile = false }
       </Card>
 
       {/* ── Sector watchlist ─────────────────────────────── */}
-      <Card eyebrow="區段監視" title="海岸網格" padding="var(--pad-card)">
+      <Card eyebrow="區段監視" title="海岸網格" padding="var(--pad-card)" style={{ flexShrink: 0 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: mobile ? 10 : 8 }}>
           {sectors.map((s) => {
             const isSel = s.id === selectedId;
@@ -737,6 +737,7 @@ function RagFeed({ sector, scanning, onRerun, mobile = false }) {
           </Button>
         }
         bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 10 }}
+        style={{ flexShrink: 0 }}
       >
         {/* Query echo */}
         <div style={{
@@ -747,6 +748,7 @@ function RagFeed({ sector, scanning, onRerun, mobile = false }) {
           borderRadius: 'var(--radius-md)',
           fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)',
           color: 'var(--text-muted)',
+          flexShrink: 0,
         }}>
           <Ico n="search" s={{ width: 13, height: 13, color: 'var(--data-cyan)' }} />
           <span style={{ color: 'var(--text-secondary)', marginRight: 4 }}>查詢:</span>
@@ -755,7 +757,7 @@ function RagFeed({ sector, scanning, onRerun, mobile = false }) {
 
         {/* Scan sweep or stats row */}
         {scanning ? (
-          <div style={{ position: 'relative', height: 3, borderRadius: 'var(--radius-full)', background: 'var(--surface-raised)', overflow: 'hidden' }}>
+          <div style={{ position: 'relative', height: 3, borderRadius: 'var(--radius-full)', background: 'var(--surface-raised)', overflow: 'hidden', flexShrink: 0 }}>
             <div style={{
               position: 'absolute', top: 0, bottom: 0, width: '33%',
               background: 'linear-gradient(90deg,transparent,var(--data-cyan),transparent)',
@@ -766,6 +768,7 @@ function RagFeed({ sector, scanning, onRerun, mobile = false }) {
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)',
+            flexShrink: 0,
           }}>
             <span>檢索到 {rules.length} 條規則</span>
             <span>top-k=3 · ef=128 · 0.18s</span>
