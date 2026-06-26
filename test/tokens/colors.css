@@ -1,0 +1,126 @@
+/* ============================================================
+   A3 MARITIME INTELLIGENCE — COLOR TOKENS
+   Dark, enterprise-grade tactical palette.
+   Base surfaces = slate; primary = oceanic teal;
+   semantic warning = amber, critical = rose.
+   The 0–10 danger gradient is lifted verbatim from the
+   production physics engine (frontend/main.js getDangerColor).
+   ============================================================ */
+
+:root {
+  /* ---- Slate scale (surfaces, borders, text) ---- */
+  --slate-950: #020617;
+  --slate-900: #0f172a;
+  --slate-850: #131c30;   /* interpolated panel tint */
+  --slate-800: #1e293b;
+  --slate-700: #334155;
+  --slate-600: #475569;
+  --slate-500: #64748b;
+  --slate-400: #94a3b8;
+  --slate-300: #cbd5e1;
+  --slate-200: #e2e8f0;
+  --slate-100: #f1f5f9;
+  --slate-50:  #f8fafc;
+
+  /* ---- Primary: oceanic teal ---- */
+  --teal-300: #5eead4;
+  --teal-400: #2dd4bf;
+  --teal-500: #14b8a6;
+  --teal-600: #0d9488;
+  --teal-700: #0f766e;
+
+  /* ---- Codebase neon cyan (data highlights, vector nodes) ---- */
+  --cyan-300: #67e8f9;
+  --cyan-400: #22d3ee;
+  --cyan-500: #06b6d4;
+
+  /* ---- Semantic: warning / amber ---- */
+  --amber-300: #fcd34d;
+  --amber-400: #fbbf24;
+  --amber-500: #f59e0b;
+  --amber-600: #d97706;
+
+  /* ---- Semantic: critical / rose ---- */
+  --rose-300: #fda4af;
+  --rose-400: #fb7185;
+  --rose-500: #f43f5e;
+  --rose-600: #e11d48;
+
+  /* ---- Semantic: success / emerald ---- */
+  --emerald-400: #34d399;
+  --emerald-500: #10b981;
+
+  /* ============================================================
+     SEMANTIC ALIASES — reference these in product UI
+     ============================================================ */
+
+  /* Surfaces (dark mode default) */
+  --surface-base:      var(--slate-950);   /* app background */
+  --surface-panel:     var(--slate-900);   /* solid cards / sidebars */
+  --surface-raised:    var(--slate-800);   /* nested panels, inputs */
+  --surface-overlay:   rgba(15, 23, 42, 0.55);  /* glassmorphism floating panels */
+  --surface-hover:     rgba(148, 163, 184, 0.08);
+  --surface-active:    rgba(148, 163, 184, 0.14);
+
+  /* Borders */
+  --border-subtle:  var(--slate-800);   /* default hairline */
+  --border-default: var(--slate-700);   /* interactive elements */
+  --border-strong:  var(--slate-600);
+  --border-glass:   rgba(148, 163, 184, 0.16);
+  --border-accent:  rgba(20, 184, 166, 0.40);
+
+  /* Text */
+  --text-primary:   var(--slate-50);    /* headings, key values */
+  --text-secondary: var(--slate-300);   /* body */
+  --text-muted:     var(--slate-400);   /* labels, captions */
+  --text-faint:     var(--slate-500);   /* meta, timestamps */
+  --text-on-accent: var(--slate-950);   /* text on teal fills */
+
+  /* Accent (primary action / focus / live data) */
+  --accent:         var(--teal-500);
+  --accent-hover:   var(--teal-400);
+  --accent-press:   var(--teal-600);
+  --accent-soft:    rgba(20, 184, 166, 0.12);
+  --accent-ring:    rgba(45, 212, 191, 0.45);
+
+  /* Data highlight (telemetry readouts, vector nodes) */
+  --data-cyan:      var(--cyan-400);
+  --data-cyan-soft: rgba(34, 211, 238, 0.12);
+
+  /* Status: warning */
+  --warn:           var(--amber-500);
+  --warn-text:      var(--amber-400);
+  --warn-soft:      rgba(245, 158, 11, 0.12);
+  --warn-border:    rgba(245, 158, 11, 0.35);
+
+  /* Status: critical */
+  --crit:           var(--rose-500);
+  --crit-text:      var(--rose-400);
+  --crit-soft:      rgba(244, 63, 94, 0.12);
+  --crit-border:    rgba(244, 63, 94, 0.38);
+
+  /* Status: nominal / online */
+  --ok:             var(--emerald-500);
+  --ok-text:        var(--emerald-400);
+  --ok-soft:        rgba(16, 185, 129, 0.12);
+  --ok-border:      rgba(16, 185, 129, 0.32);
+
+  /* ============================================================
+     DANGER INDEX GRADIENT (0 → 10)
+     Source of truth: getDangerColor() in production main.js
+     ============================================================ */
+  --danger-0:    #1464ff;  /* rgb(20,100,255)  safe / neon blue */
+  --danger-2-5:  #00ffff;  /* rgb(0,255,255)   cyan */
+  --danger-5:    #ffff00;  /* rgb(255,255,0)   yellow */
+  --danger-7-5:  #ff8c00;  /* rgb(255,140,0)   orange */
+  --danger-10:   #ff1e1e;  /* rgb(255,30,30)   critical red */
+
+  --danger-scale: linear-gradient(
+    to right,
+    var(--danger-0)   0%,
+    var(--danger-2-5) 25%,
+    var(--danger-5)   50%,
+    var(--danger-7-5) 75%,
+    var(--danger-10)  100%
+  );
+}
