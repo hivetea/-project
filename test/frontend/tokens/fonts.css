@@ -1,0 +1,13 @@
+/* ============================================================
+   A3 MARITIME INTELLIGENCE — WEBFONTS
+   Display + body : Inter (matches production frontend exactly)
+   Telemetry / data readouts : JetBrains Mono
+   ------------------------------------------------------------
+   NOTE: The production app loads Inter from Google Fonts. We
+   pull both families from the Google Fonts CSS API so consumers
+   who link styles.css get them with no extra setup. JetBrains
+   Mono is an ADDITION (not in the original codebase) chosen for
+   tactical numeric readouts — flagged in the README.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');

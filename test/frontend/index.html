@@ -1,0 +1,135 @@
+<!-- @dsCard group="Dashboard" viewport="1440x860" name="A3 Maritime RAG Dashboard" subtitle="PWA · 響應式 · 手機底部導覽 · 即時海象情報" -->
+<!-- @startingPoint section="Dashboard" subtitle="A3 Maritime Intelligence — PWA ready, full responsive" viewport="1440x860" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>A3 海象情報</title>
+
+<!-- ── PWA ──────────────────────────────────────────────── -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#14b8a6">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="A3 海象">
+<link rel="apple-touch-icon" href="./icon-192.svg">
+<meta name="msapplication-TileColor" content="#020617">
+<meta name="description" content="A3 海象智慧情報系統 — 即時海況 RAG 情報">
+
+<!-- ── Design System ─────────────────────────────────────── -->
+<link rel="stylesheet" href="./styles.css">
+
+<!-- ── External libs ─────────────────────────────────────── -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="./_ds_bundle.js"></script>
+
+<style>
+  html, body   { height: 100%; }
+  body         { margin: 0; overflow: hidden; }
+  #root        { height: 100vh; height: 100dvh; }
+
+  /* ── Slide-up panel animation ── */
+  @keyframes panelIn {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── PWA install banner ── */
+  #pwa-banner {
+    display: none;
+    position: fixed; bottom: 72px; left: 12px; right: 12px;
+    background: var(--surface-panel);
+    border: 1px solid var(--border-accent);
+    border-radius: 14px;
+    padding: 14px 16px;
+    z-index: 200;
+    align-items: center; gap: 12px;
+    box-shadow: var(--shadow-lg);
+    animation: panelIn 260ms var(--ease-out);
+  }
+  #pwa-banner.visible { display: flex; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+window.onerror = function(msg, src, lineno, colno, err) {
+  document.getElementById('root').innerHTML = '<div style="color:#ff8080; background:#111; padding:20px; z-index:9999; position:absolute; inset:0; overflow:auto; font-family:monospace;"><h3>Global Error</h3><pre>' + msg + '</pre><pre>' + (err ? err.stack : '') + '</pre></div>';
+};
+window.addEventListener('unhandledrejection', function(e) {
+  document.getElementById('root').innerHTML = '<div style="color:#ff8080; background:#111; padding:20px; z-index:9999; position:absolute; inset:0; overflow:auto; font-family:monospace;"><h3>Promise Error</h3><pre>' + e.reason + '</pre></div>';
+});
+</script>
+
+<!-- Component scripts -->
+<script src="./mockApi.js"></script>
+<script type="text/babel" data-presets="react" src="app.jsx"></script>
+
+<!-- ── Service Worker Registration ──────────────────────── -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js', { scope: './' })
+      .then((reg) => {
+        console.log('[A3] Service Worker 已啟用', reg.scope);
+        reg.addEventListener('updatefound', () => {
+          console.log('[A3] 新版本可用，請重新整理');
+        });
+      })
+      .catch((err) => {
+        console.warn('[A3] Service Worker 啟用失敗', err);
+      });
+  });
+}
+
+/* PWA install prompt */
+let _deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  _deferredPrompt = e;
+  const banner = document.getElementById('pwa-banner');
+  if (banner) banner.classList.add('visible');
+});
+
+function a3InstallPWA() {
+  if (!_deferredPrompt) return;
+  _deferredPrompt.prompt();
+  _deferredPrompt.userChoice.then(() => {
+    _deferredPrompt = null;
+    const banner = document.getElementById('pwa-banner');
+    if (banner) banner.classList.remove('visible');
+  });
+}
+</script>
+
+<!-- PWA install banner -->
+<div id="pwa-banner" role="banner" aria-label="安裝 App">
+  <div style="width:36px;height:36px;border-radius:9px;background:var(--accent-soft);border:1px solid var(--border-accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+    <i data-lucide="download" style="width:18px;height:18px;color:var(--accent)"></i>
+  </div>
+  <div style="flex:1;min-width:0">
+    <div style="font-size:14px;font-weight:600;color:var(--text-primary)">安裝 A3 海象 App</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:2px">離線使用 · 快速啟動</div>
+  </div>
+  <button
+    onclick="a3InstallPWA()"
+    style="padding:8px 16px;background:var(--accent);border:none;border-radius:8px;color:var(--text-on-accent);font-size:13px;font-weight:600;cursor:pointer"
+  >安裝</button>
+  <button
+    onclick="document.getElementById('pwa-banner').classList.remove('visible')"
+    style="width:32px;height:32px;background:none;border:none;cursor:pointer;color:var(--text-muted);display:flex;align-items:center;justify-content:center;flex-shrink:0"
+    aria-label="關閉"
+  ><i data-lucide="x" style="width:16px;height:16px"></i></button>
+</div>
+
+<!-- Lucide: static elements outside React (PWA banner) -->
+<script>window.addEventListener('load', () => window.lucide && lucide.createIcons({ nodes: [document.getElementById('pwa-banner')] }));</script>
+</body>
+</html>
