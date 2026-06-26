@@ -392,7 +392,7 @@ function GeospatialCanvas({ sectors, selectedId, onSelect, scanning, mobile = fa
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 20 }).addTo(map);
     mapRef.current = map;
     
-    window.bootEngine(map);
+    // window.bootEngine(map); // Temporarily disabled due to extreme lag from 630 SVG animations
     
     return () => { map.remove(); mapRef.current = null; };
   }, []);
@@ -410,12 +410,16 @@ function GeospatialCanvas({ sectors, selectedId, onSelect, scanning, mobile = fa
        
        if (lat === undefined || lng === undefined) {
          if (s.coord) {
-           const parts = s.coord.replace(/[°NE]/g, '').split(' ');
+           const parts = s.coord.replace(/[^\d. -]/g, ' ').trim().split(/\s+/);
            lat = parseFloat(parts[0]);
            lng = parseFloat(parts[1]);
+           console.log('Parsed coord:', s.coord, '->', lat, lng, parts);
          }
        }
-       if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng)) return;
+       if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng)) {
+         console.warn('Skipping marker due to invalid lat/lng:', s.id, lat, lng);
+         return;
+       }
        
        const html = `
          <div style="position:relative; width:${DOT}px; height:${DOT}px; display:flex; align-items:center; justify-content:center;">
