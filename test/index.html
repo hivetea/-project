@@ -61,10 +61,16 @@
 <div id="root"></div>
 <script>
 window.onerror = function(msg, src, lineno, colno, err) {
-  document.getElementById('root').innerHTML = '<div style="color:#ff8080; background:#111; padding:20px; z-index:9999; position:absolute; inset:0; overflow:auto; font-family:monospace;"><h3>Global Error</h3><pre>' + msg + '</pre><pre>' + (err ? err.stack : '') + '</pre></div>';
+  var errDiv = document.createElement('div');
+  errDiv.style = 'color:#ff8080; background:#111; padding:20px; z-index:9999; position:absolute; inset:0; overflow:auto; font-family:monospace;';
+  errDiv.innerHTML = '<h3>Global Error</h3><pre>' + msg + '</pre><pre>' + (err ? err.stack : '') + '</pre>';
+  document.body.appendChild(errDiv);
 };
 window.addEventListener('unhandledrejection', function(e) {
-  document.getElementById('root').innerHTML = '<div style="color:#ff8080; background:#111; padding:20px; z-index:9999; position:absolute; inset:0; overflow:auto; font-family:monospace;"><h3>Promise Error</h3><pre>' + e.reason + '</pre></div>';
+  var errDiv = document.createElement('div');
+  errDiv.style = 'color:#ff8080; background:#111; padding:20px; z-index:9999; position:absolute; inset:0; overflow:auto; font-family:monospace;';
+  errDiv.innerHTML = '<h3>Promise Error</h3><pre>' + e.reason + '</pre>';
+  document.body.appendChild(errDiv);
 });
 </script>
 

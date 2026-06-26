@@ -405,6 +405,10 @@ function GeospatialCanvas({ sectors, selectedId, onSelect, scanning, mobile = fa
        const isSel = s.id === selectedId;
        const DOT = mobile ? (isSel ? 22 : 18) : (isSel ? 18 : 13);
        const color = window.dangerColor(s.danger);
+       const lat = s.lat;
+       const lng = s.lon || s.lng;
+       
+       if (lat === undefined || lng === undefined) return;
        
        const html = `
          <div style="position:relative; width:${DOT}px; height:${DOT}px; display:flex; align-items:center; justify-content:center;">
